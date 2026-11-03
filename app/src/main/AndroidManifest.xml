@@ -76,12 +76,36 @@
 
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
+      <!-- 系统分享：文本、图片、音视频和文档都可以直接分享进新对话 -->
       <intent-filter>
         <action android:name="android.intent.action.SEND" />
 
         <category android:name="android.intent.category.DEFAULT" />
 
-        <data android:mimeType="text/plain" />
+        <data android:mimeType="text/*" />
+        <data android:mimeType="image/*" />
+        <data android:mimeType="video/*" />
+        <data android:mimeType="audio/*" />
+        <data android:mimeType="application/pdf" />
+        <data android:mimeType="application/msword" />
+        <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+        <data android:mimeType="application/vnd.ms-excel" />
+        <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+        <data android:mimeType="application/vnd.ms-powerpoint" />
+        <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
+        <data android:mimeType="application/epub+zip" />
+      </intent-filter>
+      <!-- 多选分享（相册一次选多张图） -->
+      <intent-filter>
+        <action android:name="android.intent.action.SEND_MULTIPLE" />
+
+        <category android:name="android.intent.category.DEFAULT" />
+
+        <data android:mimeType="text/*" />
+        <data android:mimeType="image/*" />
+        <data android:mimeType="video/*" />
+        <data android:mimeType="audio/*" />
+        <data android:mimeType="application/pdf" />
       </intent-filter>
       <intent-filter>
         <action android:name="android.intent.action.PROCESS_TEXT" />

@@ -1,7 +1,7 @@
 package me.rerere.rikkahub.ui.pages.share.handler
 
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,8 +18,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -35,12 +37,30 @@ import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
+/** 分享进来的一项附件；[mime] 解析不出来时按未知类型处理 */
+private data class SharedAttachment(
+    val uri: Uri,
+    val mime: String,
+    val name: String,
+)
+
 @Composable
-fun ShareHandlerPage(text: String, image: String?) {
+fun ShareHandlerPage(text: String, files: List<String>) {
     val vm: ShareHandlerVM = koinViewModel(parameters = { parametersOf(text) })
     val settings by vm.settings.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val navController = LocalNavController.current
+    val context = LocalContext.current
+    val attachments = remember(files) {
+        files.map { url ->
+            val uri = url.toUri()
+            SharedAttachment(
+                uri = uri,
+                mime = runCatching { context.contentResolver.getType(uri) }.getOrNull().orEmpty(),
+                name = uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: url,
+            )
+        }
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -55,26 +75,41 @@ fun ShareHandlerPage(text: String, image: String?) {
             contentPadding = it + PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            item {
-                Card {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                    ) {
-                        Text(
-                            text = vm.shareText,
-                            maxLines = 5,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.bodySmall
-                        )
+            if (vm.shareText.isNotBlank() || attachments.isNotEmpty()) {
+                item {
+                    Card {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            if (vm.shareText.isNotBlank()) {
+                                Text(
+                                    text = vm.shareText,
+                                    maxLines = 5,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
 
-                        image?.let {
-                            AsyncImage(
-                                model = it,
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                            // 图片直接给缩略图，其他类型（PDF、Word、文本…）只显示文件名，确认要带到哪个助手
+                            attachments.forEach { attachment ->
+                                if (attachment.mime.startsWith("image/")) {
+                                    AsyncImage(
+                                        model = attachment.uri,
+                                        contentDescription = attachment.name,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                } else {
+                                    Text(
+                                        text = attachment.name,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -87,8 +122,8 @@ fun ShareHandlerPage(text: String, image: String?) {
                             vm.updateAssistant(assistant.id)
                             navigateToChatPage(
                                 navigator = navController,
-                                initText = vm.shareText.base64Encode(),
-                                initFiles = image?.let { listOf(it.toUri()) } ?: emptyList()
+                                initText = vm.shareText.takeIf { it.isNotBlank() }?.base64Encode(),
+                                initFiles = attachments.map { it.uri }
                             )
                         }
                     },

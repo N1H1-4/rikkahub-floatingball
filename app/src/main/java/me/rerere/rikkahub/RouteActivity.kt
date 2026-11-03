@@ -3,6 +3,7 @@ package me.rerere.rikkahub
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
@@ -150,6 +151,33 @@ private const val ACTION_TRANSLATE = "me.rerere.rikkahub.action.TRANSLATE"
 private const val ACTION_MEDIA_CREATION = "me.rerere.rikkahub.action.MEDIA_CREATION"
 private const val EXTRA_CONVERSATION_ID = "conversationId"
 
+/**
+ * 分享进来的附件：ACTION_SEND 里是单个 Uri，ACTION_SEND_MULTIPLE 里是 Uri 列表，
+ * 也有应用两个都不填、只把内容放在 ClipData 里，三种都要取。
+ */
+@Suppress("DEPRECATION")
+private fun Intent.shareStreamUris(): List<String> {
+    val uris = mutableListOf<Uri>()
+    // API 33 起用带类型的取法，旧版本只有废弃接口；拿到的类型不对时直接忽略
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        runCatching { getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java) }
+            .getOrNull()?.let(uris::add)
+        runCatching { getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java) }
+            .getOrNull()?.let(uris::addAll)
+    } else {
+        runCatching { getParcelableExtra<Uri>(Intent.EXTRA_STREAM) }
+            .getOrNull()?.let(uris::add)
+        runCatching { getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM) }
+            .getOrNull()?.let(uris::addAll)
+    }
+    clipData?.let { clip ->
+        for (index in 0 until clip.itemCount) {
+            clip.getItemAt(index).uri?.let(uris::add)
+        }
+    }
+    return uris.distinct().map { it.toString() }
+}
+
 /** 打开指定会话的聊天页 */
 fun conversationIntent(context: Context, conversationId: String): Intent =
     Intent(context, RouteActivity::class.java).apply {
@@ -242,9 +270,9 @@ class RouteActivity : ComponentActivity() {
                 openNewMediaCreation(backStack)
                 null
             }
-            Intent.ACTION_SEND -> Screen.ShareHandler(
+            Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE -> Screen.ShareHandler(
                 text = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty(),
-                streamUri = intent.getStringExtra(Intent.EXTRA_STREAM),
+                streamUris = intent.shareStreamUris(),
             )
             Intent.ACTION_PROCESS_TEXT -> Screen.ShareHandler(
                 text = intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString().orEmpty(),
@@ -366,7 +394,7 @@ class RouteActivity : ComponentActivity() {
                             entry<Screen.ShareHandler> { key ->
                                 ShareHandlerPage(
                                     text = key.text,
-                                    image = key.streamUri
+                                    files = key.streamUris,
                                 )
                             }
 
@@ -660,7 +688,7 @@ sealed interface Screen : NavKey {
     ) : Screen
 
     @Serializable
-    data class ShareHandler(val text: String, val streamUri: String? = null) : Screen
+    data class ShareHandler(val text: String, val streamUris: List<String> = emptyList()) : Screen
 
     @Serializable
     data object History : Screen

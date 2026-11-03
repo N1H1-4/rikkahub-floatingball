@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.chat
 
 import android.net.Uri
+import android.webkit.MimeTypeMap
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
@@ -50,9 +51,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.ui.toast.ToastType
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.ui.UIMessagePart
@@ -83,6 +86,7 @@ import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.utils.base64Decode
+import me.rerere.rikkahub.utils.isAllowedFileType
 import me.rerere.rikkahub.utils.navigateToChatPage
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -98,6 +102,8 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
         }
     )
     val filesManager: FilesManager = koinInject()
+    val context = LocalContext.current
+    val toaster = LocalToaster.current
     val navController = LocalNavController.current
     val scope = rememberCoroutineScope()
 
@@ -154,22 +160,37 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     // 初始化输入状态（处理传入的 files 和 text 参数）
     LaunchedEffect(files, text) {
         if (files.isNotEmpty()) {
-            val localFiles = filesManager.createChatFilesByContents(files)
-            val contentTypes = files.mapNotNull { file ->
-                filesManager.getFileMimeType(file)
-            }
-            val parts = buildList {
-                localFiles.forEachIndexed { index, file ->
-                    val type = contentTypes.getOrNull(index)
-                    if (type?.startsWith("image/") == true) {
-                        add(UIMessagePart.Image(url = file.toString()))
-                    } else if (type?.startsWith("video/") == true) {
-                        add(UIMessagePart.Video(url = file.toString()))
-                    } else if (type?.startsWith("audio/") == true) {
-                        add(UIMessagePart.Audio(url = file.toString()))
+            // 分享进来的附件按 MIME 分成图片/视频/音频/文档，不支持的格式提示后跳过。
+            // 拷贝文件、写数据库都是 IO，放到后台线程做，避免分享大图时卡住首屏
+            val errors = mutableListOf<String>()
+            val parts = withContext(Dispatchers.IO) {
+                files.mapNotNull { uri ->
+                    val fileName = filesManager.getFileNameFromUri(uri) ?: uri.lastPathSegment ?: "file"
+                    val mime = resolveMimeType(filesManager, uri, fileName)
+                    val supported = mime.startsWith("image/") || mime.startsWith("video/") ||
+                        mime.startsWith("audio/") || isAllowedFileType(fileName, mime)
+                    if (!supported) {
+                        errors.add(context.getString(R.string.chat_input_unsupported_file_type, fileName))
+                        return@mapNotNull null
+                    }
+                    val localUri = filesManager.createChatFilesByContents(listOf(uri)).firstOrNull()
+                    if (localUri == null) {
+                        errors.add(context.getString(R.string.chat_input_file_read_failed, fileName))
+                        return@mapNotNull null
+                    }
+                    when {
+                        mime.startsWith("image/") -> UIMessagePart.Image(url = localUri.toString())
+                        mime.startsWith("video/") -> UIMessagePart.Video(url = localUri.toString())
+                        mime.startsWith("audio/") -> UIMessagePart.Audio(url = localUri.toString())
+                        else -> UIMessagePart.Document(
+                            url = localUri.toString(),
+                            fileName = fileName,
+                            mime = mime
+                        )
                     }
                 }
             }
+            errors.forEach { toaster.show(it, type = ToastType.Error) }
             inputState.messageContent = parts
         }
         text?.base64Decode()?.let { decodedText ->
@@ -677,4 +698,13 @@ private fun TopBar(
             }
         )
     }
+}
+
+/** 分享进来的 content:// 能直接查到 MIME；file:// 之类按扩展名猜，猜不出来就当作未知类型 */
+private fun resolveMimeType(filesManager: FilesManager, uri: Uri, fileName: String): String {
+    filesManager.getFileMimeType(uri)?.takeIf { it.isNotBlank() }?.let { return it }
+    val extension = fileName.substringAfterLast('.', "").lowercase()
+    return extension.takeIf { it.isNotEmpty() }
+        ?.let { MimeTypeMap.getSingleton().getMimeTypeFromExtension(it) }
+        ?: "application/octet-stream"
 }
