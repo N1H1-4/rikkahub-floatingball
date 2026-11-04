@@ -20,6 +20,8 @@
   <string name="sketch_dialog_brush_flat">平头笔</string>
   <string name="sketch_dialog_text">文字</string>
   <string name="sketch_dialog_select">选择</string>
+  <string name="sketch_dialog_input_stylus">仅手写笔</string>
+  <string name="sketch_dialog_input_any">手指和笔</string>
   <string name="chart_mode_chart">图表</string>
   <string name="chart_mode_table">表格</string>
   <string name="chart_series">系列</string>

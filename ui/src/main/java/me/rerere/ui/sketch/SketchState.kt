@@ -5,6 +5,7 @@ import android.text.StaticLayout
 import android.text.TextPaint
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -18,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.unit.dp
 import androidx.ink.geometry.ImmutableBox
 import androidx.ink.geometry.ImmutableVec
@@ -55,6 +57,9 @@ private const val ERASER_WIDTH_SCALE = 4f
 
 // 字号是所选粗细的多少倍
 private const val TEXT_SIZE_SCALE = 4f
+
+// 手指能把画纸放到多大
+private const val MAX_ZOOM = 4f
 
 /** 手指落在画纸上时做什么。 */
 internal enum class SketchTool { Brush, Eraser, Text, Select }
@@ -183,6 +188,39 @@ internal class SketchState(aspectRatio: Float? = null) {
     var tool by mutableStateOf(SketchTool.Brush)
         private set
     val erasing: Boolean get() = tool == SketchTool.Eraser
+
+    /** 画纸接受哪种输入。笔模式下手指用来平移和缩放画纸，不会落墨。 */
+    var inputMode by mutableStateOf(SketchInputMode.Stylus)
+        private set
+
+    fun toggleInputMode() {
+        inputMode = if (inputMode == SketchInputMode.Stylus) SketchInputMode.Any else SketchInputMode.Stylus
+    }
+
+    /** 手指把画纸放大了多少倍，1 表示正好放进可用区域。 */
+    var zoom by mutableFloatStateOf(1f)
+        private set
+
+    /** 放大之后画纸相对正中的偏移，单位是屏幕像素。 */
+    var pan by mutableStateOf(Offset.Zero)
+        private set
+
+    /**
+     * 手指拖动和捏合：围绕 [centroid] 缩放并平移画纸。
+     *
+     * 缩回 1 倍时画纸正好铺满，偏移没有意义，直接回正。
+     */
+    fun transform(centroid: Offset, panChange: Offset, zoomChange: Float, canvas: Size) {
+        if (!paperSize.isSpecified || canvas.width <= 0f) return
+        val newZoom = (zoom * zoomChange).coerceIn(1f, MAX_ZOOM)
+        if (newZoom != zoom) {
+            val center = Offset(canvas.width / 2f, canvas.height / 2f)
+            // 捏合时手指中心底下的画纸那一块要保持不动
+            pan = centroid - center - (centroid - center - pan) / (newZoom / zoom)
+        }
+        zoom = newZoom
+        pan = if (newZoom <= 1f) Offset.Zero else pan + panChange
+    }
 
     /** 点了画纸、正等着输入文字时，文字要放的位置（画纸坐标）。 */
     var writingAt by mutableStateOf<Offset?>(null)

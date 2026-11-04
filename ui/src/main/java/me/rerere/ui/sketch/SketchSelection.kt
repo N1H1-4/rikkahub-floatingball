@@ -121,11 +121,16 @@ internal suspend fun AwaitPointerEventScope.selectGesture(
 }
 
 /** 选框和选中范围的边框、四角的控制点。只画在屏幕上，不会进到导出的图片里。 */
-internal fun DrawScope.drawSelection(state: SketchState, scale: Float, color: Color) {
+internal fun DrawScope.drawSelection(
+    state: SketchState,
+    scale: Float,
+    color: Color,
+    pan: Offset = Offset.Zero,
+) {
     val marquee = state.marquee
     val bounds = state.selectionBounds
     if (marquee == null && bounds == null) return
-    translate(size.width / 2, size.height / 2) {
+    translate(size.width / 2 + pan.x, size.height / 2 + pan.y) {
         scale(scale, pivot = Offset.Zero) {
             // 这里的单位是画纸坐标，线宽和圆点要除掉缩放才是屏幕上想要的大小
             val outline = Stroke(

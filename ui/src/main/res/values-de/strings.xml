@@ -24,6 +24,8 @@
   <string name="sketch_dialog_brush_flat">Flacher Stift</string>
   <string name="sketch_dialog_text">Text</string>
   <string name="sketch_dialog_select">Auswählen</string>
+  <string name="sketch_dialog_input_stylus">Nur Stift</string>
+  <string name="sketch_dialog_input_any">Finger und Stift</string>
   <string name="image_crop_rotate">Drehen</string>
   <string name="image_crop_reset">Zurücksetzen</string>
   <string name="image_crop_free">Frei</string>

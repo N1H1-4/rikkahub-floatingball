@@ -2,6 +2,9 @@ package me.rerere.ui.sketch
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
@@ -20,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
@@ -33,8 +37,11 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -75,28 +82,42 @@ internal fun SketchCanvas(state: SketchState, modifier: Modifier = Modifier) {
                             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                             // 落笔说明颜色调好了
                             state.pickingColor = false
+                            // 笔的橡皮端：不管手上拿着什么工具，划过去就是擦
+                            val eraserPointer = down.type == PointerType.Eraser
+                            // 笔模式下手指只负责移动和缩放画纸。吃掉按下，落笔层就不会把它画出来
+                            if (state.inputMode == SketchInputMode.Stylus &&
+                                down.type != PointerType.Stylus &&
+                                !eraserPointer
+                            ) {
+                                down.consume()
+                                moveCanvas(state, size.toSize())
+                                return@awaitEachGesture
+                            }
+                            val tool = if (eraserPointer) SketchTool.Eraser else state.tool
                             // 画笔的一笔由落笔层接手，这里管橡皮、文字和选择
-                            if (state.tool == SketchTool.Brush) {
+                            if (tool == SketchTool.Brush) {
                                 // 有的机型（Android 13 的 OPPO）上落笔层要等窗口再画一帧才开始出墨和交回笔画，
                                 // 而用画笔时窗口本身没有变化、不会重画，一直画都不显示。落笔时主动让窗口画一帧
                                 view.invalidate()
                                 return@awaitEachGesture
                             }
                             down.consume()
-                            val scale = size.width / paper.width
-                            // 画纸坐标的原点在正中
-                            val center = Offset(size.width / 2f, size.height / 2f)
-                            if (state.tool == SketchTool.Text) {
+                            // 画纸坐标的换算：一个画纸单位有多少屏幕像素（手指放大过就更多）
+                            val scale = size.width / paper.width * state.zoom
+                            // 画纸坐标的原点在画纸正中，放大之后跟着偏移
+                            val center = Offset(size.width / 2f, size.height / 2f) + state.pan
+                            if (tool == SketchTool.Text) {
                                 // 手指抬起的地方就是文字的位置，划出画纸或者被打断就不算
                                 val up = waitForUpOrCancellation(PointerEventPass.Initial) ?: return@awaitEachGesture
                                 up.consume()
                                 state.beginText((up.position - center) / scale, state.width.toPx() / scale)
                                 return@awaitEachGesture
                             }
-                            if (state.tool == SketchTool.Select) {
+                            if (tool == SketchTool.Select) {
                                 selectGesture(state, down, scale) { (it - center) / scale }
                                 return@awaitEachGesture
                             }
+                            // 选了橡皮，或者用的是笔的橡皮端
                             val line = state.erase((down.position - center) / scale, state.width.toPx() / scale)
                             try {
                                 // 只跟随落下的那根手指，其余的忽略
@@ -120,20 +141,22 @@ internal fun SketchCanvas(state: SketchState, modifier: Modifier = Modifier) {
                 val selectionColor = MaterialTheme.colorScheme.primary
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     state.revision
-                    drawSketch(state, size.width / paper.width, renderer)
-                    drawSelection(state, size.width / paper.width, selectionColor)
+                    val scale = size.width / paper.width * state.zoom
+                    drawSketch(state, scale, renderer, pan = state.pan)
+                    drawSelection(state, scale, selectionColor, pan = state.pan)
                 }
                 if (canvasSize != IntSize.Zero) {
-                    val scale = canvasSize.width / paper.width
+                    val pan = state.pan
+                    val scale = canvasSize.width / paper.width * state.zoom
                     val density = LocalDensity.current
                     val brush = remember(state.brush, state.color, state.width, scale, density) {
                         state.brush.create(state.color, with(density) { state.width.toPx() } / scale)
                     }
                     // 屏幕上的位置换成画纸坐标：先把原点挪到正中，再除掉缩放
-                    val toPaper = remember(canvasSize, scale) {
+                    val toPaper = remember(canvasSize, scale, pan) {
                         Matrix().apply {
                             scale(1 / scale, 1 / scale)
-                            translate(-canvasSize.width / 2f, -canvasSize.height / 2f)
+                            translate(-canvasSize.width / 2f - pan.x, -canvasSize.height / 2f - pan.y)
                         }
                     }
                     // 不在用画笔时不出墨。落笔层本身留着，来回切换不用重新初始化
@@ -151,10 +174,36 @@ internal fun SketchCanvas(state: SketchState, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * 手指在画纸上拖动和捏合：平移、缩放画纸。只有笔模式下走这里，手指这时不落墨。
+ */
+private suspend fun AwaitPointerEventScope.moveCanvas(state: SketchState, canvas: Size) {
+    while (true) {
+        val event = awaitPointerEvent(PointerEventPass.Initial)
+        if (event.changes.all { !it.pressed }) break
+        val centroid = event.calculateCentroid(useCurrent = false)
+        if (centroid.isSpecified) {
+            state.transform(
+                centroid = centroid,
+                panChange = event.calculatePan(),
+                zoomChange = event.calculateZoom(),
+                canvas = canvas,
+            )
+        }
+        // 全部吃掉：画纸在动的时候，落笔层不能把这些事件同时画成一笔
+        event.changes.forEach { if (it.positionChanged()) it.consume() }
+    }
+}
+
 private val LayerPaint = Paint()
 
 // 屏幕上显示和导出图片用的是同一套绘制，[scale] 是画纸坐标到目标像素的比例
-internal fun DrawScope.drawSketch(state: SketchState, scale: Float, renderer: CanvasStrokeRenderer) {
+internal fun DrawScope.drawSketch(
+    state: SketchState,
+    scale: Float,
+    renderer: CanvasStrokeRenderer,
+    pan: Offset = Offset.Zero,
+) {
     drawRect(SketchDefaults.PaperColor)
     state.background?.let {
         drawImage(image = it, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()))
@@ -167,7 +216,7 @@ internal fun DrawScope.drawSketch(state: SketchState, scale: Float, renderer: Ca
     val strokeTransform = android.graphics.Matrix()
     // 笔画单独画在一层上：橡皮擦掉的只是这一层，下面的画纸和底图不受影响
     drawIntoCanvas { it.saveLayer(Rect(Offset.Zero, size), LayerPaint) }
-    translate(size.width / 2, size.height / 2) {
+    translate(size.width / 2 + pan.x, size.height / 2 + pan.y) {
         scale(scale, pivot = Offset.Zero) {
             for (index in first until steps.size) {
                 when (val step = steps[index]) {
