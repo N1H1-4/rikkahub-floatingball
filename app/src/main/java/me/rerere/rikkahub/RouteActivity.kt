@@ -113,6 +113,7 @@ import me.rerere.rikkahub.ui.pages.mediacreation.MediaCreationPage
 import me.rerere.rikkahub.ui.pages.mediacreation.MediaCreationSessionsPage
 import me.rerere.rikkahub.ui.pages.search.SearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingAboutPage
+import me.rerere.rikkahub.ui.pages.setting.SettingDesktopPetPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesThemePage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNotificationPage
@@ -140,6 +141,7 @@ import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
 import me.rerere.rikkahub.ui.pages.webview.WebViewPage
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import me.rerere.rikkahub.utils.CrashHandler
+import me.rerere.rikkahub.utils.base64Encode
 import me.rerere.rikkahub.utils.openUsageAccessSettings
 import okhttp3.OkHttpClient
 import org.koin.android.ext.android.inject
@@ -150,6 +152,8 @@ private const val TAG = "RouteActivity"
 private const val ACTION_TRANSLATE = "me.rerere.rikkahub.action.TRANSLATE"
 private const val ACTION_MEDIA_CREATION = "me.rerere.rikkahub.action.MEDIA_CREATION"
 private const val EXTRA_CONVERSATION_ID = "conversationId"
+private const val EXTRA_CHAT_TEXT = "chatText"
+private const val EXTRA_CHAT_FILES = "chatFiles"
 
 /**
  * 分享进来的附件：ACTION_SEND 里是单个 Uri，ACTION_SEND_MULTIPLE 里是 Uri 列表，
@@ -178,11 +182,20 @@ private fun Intent.shareStreamUris(): List<String> {
     return uris.distinct().map { it.toString() }
 }
 
-/** 打开指定会话的聊天页 */
-fun conversationIntent(context: Context, conversationId: String): Intent =
+/** 打开指定会话的聊天页；[text] 和 [imageUrl] 是面板里还没发出去的草稿 */
+fun conversationIntent(
+    context: Context,
+    conversationId: String,
+    text: String? = null,
+    imageUrl: String? = null,
+): Intent =
     Intent(context, RouteActivity::class.java).apply {
         flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         putExtra(EXTRA_CONVERSATION_ID, conversationId)
+        if (!text.isNullOrBlank()) putExtra(EXTRA_CHAT_TEXT, text.base64Encode())
+        if (!imageUrl.isNullOrBlank()) {
+            putStringArrayListExtra(EXTRA_CHAT_FILES, arrayListOf(imageUrl))
+        }
     }
 
 class RouteActivity : ComponentActivity() {
@@ -278,7 +291,13 @@ class RouteActivity : ComponentActivity() {
                 text = intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString().orEmpty(),
             )
             else -> mediaCreationDestination(intent)
-                ?: intent.getStringExtra(EXTRA_CONVERSATION_ID)?.let { Screen.Chat(it) }
+                ?: intent.getStringExtra(EXTRA_CONVERSATION_ID)?.let { id ->
+                    Screen.Chat(
+                        id = id,
+                        text = intent.getStringExtra(EXTRA_CHAT_TEXT),
+                        files = intent.getStringArrayListExtra(EXTRA_CHAT_FILES).orEmpty(),
+                    )
+                }
         }
         if (destination != null && backStack.lastOrNull() != destination) {
             backStack.add(destination)
@@ -505,6 +524,10 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.SettingPreferencesNetwork> {
                                 SettingPreferencesNetworkPage()
+                            }
+
+                            entry<Screen.SettingDesktopPet> {
+                                SettingDesktopPetPage()
                             }
 
                             entry<Screen.SettingProvider> {
@@ -768,6 +791,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingPreferencesNetwork : Screen
+
+    @Serializable
+    data object SettingDesktopPet : Screen
 
     @Serializable
     data object SettingProvider : Screen

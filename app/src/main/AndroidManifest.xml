@@ -15,6 +15,7 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
   <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
   <uses-permission
     android:name="android.permission.PACKAGE_USAGE_STATS"
@@ -129,6 +130,15 @@
         android:name="android.app.shortcuts"
         android:resource="@xml/shortcuts" />
     </activity>
+    <!-- 桌宠截屏：授权与冻结帧预览。拿到画面之前窗口全透明，不能画任何东西 -->
+    <activity
+      android:name=".ui.screenshot.ScreenCaptureActivity"
+      android:configChanges="keyboardHidden|orientation|screenSize"
+      android:excludeFromRecents="true"
+      android:exported="false"
+      android:label="@string/screen_capture_activity_label"
+      android:taskAffinity=""
+      android:theme="@android:style/Theme.Translucent.NoTitleBar" />
     <activity
       android:name=".ui.activity.ShortcutHandlerActivity"
       android:exported="true"
@@ -155,6 +165,10 @@
       android:name=".service.MemoryDreamForegroundService"
       android:exported="false"
       android:foregroundServiceType="dataSync" />
+    <service
+      android:name=".service.ScreenCaptureService"
+      android:exported="false"
+      android:foregroundServiceType="mediaProjection" />
     <service
       android:name=".service.WebServerService"
       android:exported="false"

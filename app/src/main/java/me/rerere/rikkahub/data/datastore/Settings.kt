@@ -175,6 +175,13 @@ data class DisplaySetting(
     val enableVolumeKeyScroll: Boolean = false,
     val volumeKeyScrollRatio: Float = 1.0f,
     val conversationSortOrder: ConversationSortOrder = ConversationSortOrder.UPDATE_TIME,
+    val enableDesktopPet: Boolean = false,
+    // Desktop pet: empty path means the built-in mascot, otherwise a file:// path picked by the user
+    val desktopPetImagePath: String = "",
+    val desktopPetSize: Float = 1f,
+    val desktopPetOpacity: Float = 1f,
+    val desktopPetDockToEdge: Boolean = true,
+    val desktopPetAutoHide: Boolean = false,
 )
 
 @Serializable

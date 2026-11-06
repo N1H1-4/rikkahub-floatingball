@@ -58,7 +58,12 @@ import kotlin.math.roundToInt
  * 画笔交给 Ink：正在画的一笔由它的落笔层低延迟地画出来；画完再交回来，和橡皮、底图一起画在下面的画布上。
  */
 @Composable
-internal fun SketchCanvas(state: SketchState, modifier: Modifier = Modifier) {
+internal fun SketchCanvas(
+    state: SketchState,
+    modifier: Modifier = Modifier,
+    // 关掉后只负责把已有笔画画出来，不接触摸：截图编辑器在框选模式下要它让位给裁剪框
+    interactive: Boolean = true,
+) {
     Box(
         modifier = modifier.onSizeChanged {
             if (it.width > 0 && it.height > 0) state.fit(it.toSize())
@@ -76,7 +81,11 @@ internal fun SketchCanvas(state: SketchState, modifier: Modifier = Modifier) {
                     .clip(MaterialTheme.shapes.medium)
                     // 贴着屏幕边缘起笔时不要被当成系统的返回手势
                     .systemGestureExclusion()
-                    .pointerInput(state, paper) {
+                    .pointerInput(state, paper, interactive) {
+                        // 框选模式下这个节点要彻底安静：直接结束，连手势处理器都不留。
+                        // 只要它还挂着 awaitEachGesture，就会和外面的选框抢同一个触摸，
+                        // 表现为选框在已有笔迹附近"粘住"。
+                        if (!interactive) return@pointerInput
                         awaitEachGesture {
                             // 抢在落笔层前面看到按下
                             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
@@ -90,7 +99,7 @@ internal fun SketchCanvas(state: SketchState, modifier: Modifier = Modifier) {
                                 !eraserPointer
                             ) {
                                 down.consume()
-                                moveCanvas(state, size.toSize())
+                                if (state.transformEnabled) moveCanvas(state, size.toSize())
                                 return@awaitEachGesture
                             }
                             val tool = if (eraserPointer) SketchTool.Eraser else state.tool
@@ -145,7 +154,7 @@ internal fun SketchCanvas(state: SketchState, modifier: Modifier = Modifier) {
                     drawSketch(state, scale, renderer, pan = state.pan)
                     drawSelection(state, scale, selectionColor, pan = state.pan)
                 }
-                if (canvasSize != IntSize.Zero) {
+                if (interactive && canvasSize != IntSize.Zero) {
                     val pan = state.pan
                     val scale = canvasSize.width / paper.width * state.zoom
                     val density = LocalDensity.current

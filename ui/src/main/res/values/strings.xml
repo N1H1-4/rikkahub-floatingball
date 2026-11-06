@@ -32,4 +32,16 @@
   <string name="image_crop_original">Original</string>
   <string name="image_crop_load_failed">Couldn\'t load the image</string>
   <string name="image_crop_failed">Couldn\'t crop the image</string>
+  <string name="screenshot_editor_hint">Drag to select an area</string>
+  <string name="screenshot_editor_size">%1$d × %2$d px</string>
+  <string name="screenshot_editor_cancel">Close</string>
+  <string name="screenshot_editor_copy">Copy image</string>
+  <string name="screenshot_editor_save">Save to gallery</string>
+  <string name="screenshot_editor_send_new_chat">Send to new chat</string>
+  <string name="screenshot_editor_send_to_chat">Send to existing chat</string>
+  <string name="screenshot_editor_ratio">Aspect ratio</string>
+  <string name="screenshot_editor_ratio_free">Free</string>
+  <string name="screenshot_editor_size_title">Selection size</string>
+  <string name="screenshot_editor_width">Width</string>
+  <string name="screenshot_editor_height">Height</string>
 </resources>

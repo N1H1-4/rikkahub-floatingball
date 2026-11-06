@@ -153,17 +153,28 @@ class ChatFloatingWindows(
         compose {
             WindowContent { state ->
                 val conversationId = state.conversationId
+                val draft by tracker.draftImageState.collectAsStateWithLifecycle()
                 ChatFloatingPanel(
                     state = state,
                     maxHeight = rememberPanelMaxHeight(),
                     onCollapse = tracker::collapse,
                     onDismiss = tracker::dismiss,
-                    onOpenConversation = { openConversation(conversationId) },
+                    onOpenConversation = { text -> openConversation(conversationId, text) },
                     onToolApproval = { toolCallId, approved ->
                         chatService.handleToolApproval(conversationId, toolCallId, approved)
                     },
                     onStop = { appScope.launch { chatService.stopGeneration(conversationId) } },
-                    onSend = { text -> chatService.sendMessage(conversationId, listOf(UIMessagePart.Text(text))) },
+                    draftImage = draft,
+                    onRemoveDraft = tracker::clearDraftImage,
+                    onSend = { text ->
+                        val parts = buildList {
+                            draft?.let { add(UIMessagePart.Image(url = it)) }
+                            if (text.isNotBlank()) add(UIMessagePart.Text(text))
+                        }
+                        chatService.sendMessage(conversationId, parts)
+                        // 图已经进消息了，会话继续钉住，方便在面板里看回复
+                        tracker.clearDraftImage()
+                    },
                     onResumeQueue = { chatService.resumeMessageQueue(conversationId) },
                 )
             }
@@ -216,10 +227,15 @@ class ChatFloatingWindows(
         return metrics.bounds.height() - insets.top - insets.bottom
     }
 
-    private fun openConversation(conversationId: Uuid) {
+    private fun openConversation(conversationId: Uuid, draftText: String) {
+        // 面板里的草稿（文字 + 刚截的图）要跟着进聊天页，不能丢掉
+        val draftImage = tracker.draftImageState.value
+        // 打开应用内的会话后，悬浮面板就没必要继续钉在上面了
+        tracker.dismiss()
         // 有悬浮窗权限的应用允许从后台启动 Activity
         context.startActivity(
-            conversationIntent(context, conversationId.toString()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            conversationIntent(context, conversationId.toString(), draftText, draftImage)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
     }
 

@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -45,13 +46,28 @@ class ChatFloatingTracker(
     private val isForeground = MutableStateFlow(true)
     private val actions = MutableSharedFlow<Action>(extraBufferCapacity = 8)
 
-    val window: StateFlow<FloatingChatWindow?> = combine(
+    // 截图"发送到对话"用：用户明确点名了会话，优先级高于自动跟随，发完消息也不撤，
+    // 直到他自己关掉面板，这样才能在悬浮窗里接着看回复
+    private val pinned = MutableStateFlow<Uuid?>(null)
+    private val pinnedExpanded = MutableStateFlow(true)
+
+    // 刚截的图，挂在面板输入框上等用户配一句话
+    private val draftImage = MutableStateFlow<String?>(null)
+    val draftImageState: StateFlow<String?> = draftImage.asStateFlow()
+
+    private val trackedWindow: StateFlow<FloatingChatWindow?> = combine(
         settingsStore.settingsFlow.map { it.displaySetting.enableFloatingChatWindow },
         isForeground,
     ) { enabled, foreground -> enabled && !foreground }
         .distinctUntilChanged()
         .flatMapLatest { active -> if (active) trackInBackground() else flowOf(null) }
         .stateIn(appScope, SharingStarted.Eagerly, null)
+
+    val window: StateFlow<FloatingChatWindow?> =
+        combine(trackedWindow, pinned, pinnedExpanded) { tracked, pinnedId, expanded ->
+            // 用户点"发送到对话"时不看悬浮窗开关，也不看前后台：这就是他要的结果
+            pinnedId?.let { FloatingChatWindow(it, expanded) } ?: tracked
+        }.stateIn(appScope, SharingStarted.Eagerly, null)
 
     init {
         appScope.launch {
@@ -80,16 +96,33 @@ class ChatFloatingTracker(
     }
 
     fun expand() {
+        pinnedExpanded.value = true
         actions.tryEmit(Action.Expand)
     }
 
     fun collapse() {
+        pinnedExpanded.value = false
         actions.tryEmit(Action.Collapse)
     }
 
     /** 关掉悬浮窗，等下一个开始生成的会话 */
     fun dismiss() {
+        pinned.value = null
+        pinnedExpanded.value = true
+        draftImage.value = null
         actions.tryEmit(Action.Dismiss)
+    }
+
+    /** 截图"发送到对话"：钉住指定会话并把这张图挂到面板的输入框上 */
+    fun openDraft(conversationId: Uuid, imageUrl: String) {
+        pinned.value = conversationId
+        pinnedExpanded.value = true
+        draftImage.value = imageUrl
+    }
+
+    /** 图片已经发出去了，但会话继续钉住，方便在面板里看回复 */
+    fun clearDraftImage() {
+        draftImage.value = null
     }
 
     // 每次切到后台从头开始，这时已经在生成的会话也算刚开始

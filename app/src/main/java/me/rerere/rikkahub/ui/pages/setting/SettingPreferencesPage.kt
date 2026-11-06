@@ -18,6 +18,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Internet
 import me.rerere.hugeicons.stroke.Notification01
 import me.rerere.hugeicons.stroke.PaintBoard
+import me.rerere.hugeicons.stroke.Robot01
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Sun01
 import me.rerere.rikkahub.R
@@ -88,6 +89,12 @@ fun SettingPreferencesPage() {
                         leadingContent = { CardGroupIcon(HugeIcons.Internet, containerColor = containerColor, contentColor = contentColor) },
                         headlineContent = { Text(stringResource(R.string.setting_page_preferences_network)) },
                         supportingContent = { Text(stringResource(R.string.setting_page_preferences_network_desc)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingDesktopPet) },
+                        leadingContent = { CardGroupIcon(HugeIcons.Robot01, containerColor = containerColor, contentColor = contentColor) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_preferences_desktop_pet)) },
+                        supportingContent = { Text(stringResource(R.string.setting_page_preferences_desktop_pet_desc)) },
                     )
                 }
             }

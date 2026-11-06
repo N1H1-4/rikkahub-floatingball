@@ -32,4 +32,16 @@
   <string name="image_crop_original">原图</string>
   <string name="image_crop_load_failed">无法加载图片</string>
   <string name="image_crop_failed">无法裁剪图片</string>
+  <string name="screenshot_editor_hint">拖动框选要截取的区域</string>
+  <string name="screenshot_editor_size">%1$d × %2$d 像素</string>
+  <string name="screenshot_editor_cancel">关闭</string>
+  <string name="screenshot_editor_copy">复制图片</string>
+  <string name="screenshot_editor_save">保存到相册</string>
+  <string name="screenshot_editor_send_new_chat">发送到新对话</string>
+  <string name="screenshot_editor_send_to_chat">发送到已有对话</string>
+  <string name="screenshot_editor_ratio">画幅比例</string>
+  <string name="screenshot_editor_ratio_free">自由</string>
+  <string name="screenshot_editor_size_title">选区大小</string>
+  <string name="screenshot_editor_width">宽度</string>
+  <string name="screenshot_editor_height">高度</string>
 </resources>

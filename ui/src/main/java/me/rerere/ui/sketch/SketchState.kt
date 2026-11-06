@@ -201,6 +201,13 @@ internal class SketchState(aspectRatio: Float? = null) {
     var zoom by mutableFloatStateOf(1f)
         private set
 
+    /**
+     * 是否允许手指平移缩放画纸。
+     *
+     * 截图编辑器里必须关掉：框选范围是按屏幕坐标算的，画纸一旦动了就对不上。
+     */
+    var transformEnabled: Boolean = true
+
     /** 放大之后画纸相对正中的偏移，单位是屏幕像素。 */
     var pan by mutableStateOf(Offset.Zero)
         private set

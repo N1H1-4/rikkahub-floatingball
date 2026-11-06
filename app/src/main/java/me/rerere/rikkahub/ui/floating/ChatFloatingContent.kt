@@ -13,11 +13,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -42,6 +45,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -52,6 +56,7 @@ import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -62,7 +67,11 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.currentStateAsState
+import coil3.compose.AsyncImage
+import me.rerere.ai.core.ReasoningLevel
+import me.rerere.ai.provider.ModelType
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Alert01
@@ -73,15 +82,23 @@ import me.rerere.hugeicons.stroke.Remove01
 import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.hugeicons.stroke.Stop
 import me.rerere.hugeicons.stroke.Tick01
+import me.rerere.hugeicons.stroke.Idea
+import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.hugeicons.stroke.Wrench01
+import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.local.ASK_USER_TOOL_NAME
+import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
 import me.rerere.rikkahub.data.model.GenerationPhase
+import me.rerere.rikkahub.data.model.getAssistantOf
 import me.rerere.rikkahub.service.ChatError
+import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.ui.components.ui.drawAppLogo
 import me.rerere.rikkahub.ui.components.ui.logoMorphShape
 import me.rerere.rikkahub.ui.components.ui.rememberAppLogoLayers
 import me.rerere.rikkahub.ui.components.richtext.MaterialMarkdown
+import org.koin.compose.koinInject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.ceil
@@ -191,12 +208,18 @@ fun ChatFloatingPanel(
     maxHeight: Dp,
     onCollapse: () -> Unit,
     onDismiss: () -> Unit,
-    onOpenConversation: () -> Unit,
+    onOpenConversation: (draftText: String) -> Unit,
     onToolApproval: (toolCallId: String, approved: Boolean) -> Unit,
     onStop: () -> Unit,
     onSend: (String) -> Unit,
     onResumeQueue: () -> Unit,
+    /** 截图发过来时先挂在这里的图片，发出后由调用方清掉 */
+    draftImage: String? = null,
+    onRemoveDraft: () -> Unit = {},
 ) {
+    // 输入框内容提到这一层：点全屏要把它带进聊天页，不能丢
+    var replyText by rememberSaveable(state.conversationId) { mutableStateOf("") }
+
     // 窗口和屏幕一样宽，大屏上限制宽度并居中
     Box(modifier = Modifier.fillMaxWidth().heightIn(max = maxHeight), contentAlignment = Alignment.TopCenter) {
         Surface(
@@ -214,7 +237,7 @@ fun ChatFloatingPanel(
             ) {
                 PanelHeader(
                     state = state,
-                    onOpenConversation = onOpenConversation,
+                    onOpenConversation = { onOpenConversation(replyText) },
                     onCollapse = onCollapse,
                     onDismiss = onDismiss,
                 )
@@ -237,7 +260,7 @@ fun ChatFloatingPanel(
                             PendingToolCard(
                                 tool = tool,
                                 onApproval = { approved -> onToolApproval(tool.toolCallId, approved) },
-                                onOpenConversation = onOpenConversation,
+                                onOpenConversation = { onOpenConversation(replyText) },
                             )
                         }
                         if (state.queuedCount > 0) {
@@ -245,10 +268,22 @@ fun ChatFloatingPanel(
                         }
                     }
                 }
-                ReplyBar(
+                ComposerToolbar(
                     conversationId = state.conversationId,
+                    draftImage = draftImage,
+                    onRemoveDraft = onRemoveDraft,
+                    onApplyQuickMessage = { replyText = it },
+                    onManageExtensions = { onOpenConversation(replyText) },
+                )
+                ReplyBar(
+                    text = replyText,
+                    onTextChange = { replyText = it },
                     generating = state.generating,
-                    onSend = onSend,
+                    canSendEmpty = draftImage != null,
+                    onSend = {
+                        replyText = ""
+                        onSend(it)
+                    },
                     onStop = onStop,
                 )
             }
@@ -413,19 +448,20 @@ private fun QueueRow(count: Int, paused: Boolean, onResume: () -> Unit) {
 
 @Composable
 private fun ReplyBar(
-    conversationId: Uuid,
+    text: String,
+    onTextChange: (String) -> Unit,
     generating: Boolean,
     onSend: (String) -> Unit,
     onStop: () -> Unit,
+    canSendEmpty: Boolean = false,
 ) {
     val focusManager = LocalFocusManager.current
-    var text by rememberSaveable(conversationId) { mutableStateOf("") }
 
     fun send() {
         val content = text.trim()
-        if (content.isEmpty()) return
+        // 只有图片没有文字时也要能发
+        if (content.isEmpty() && !canSendEmpty) return
         onSend(content)
-        text = ""
         focusManager.clearFocus()
     }
 
@@ -435,7 +471,7 @@ private fun ReplyBar(
     ) {
         TextField(
             value = text,
-            onValueChange = { text = it },
+            onValueChange = onTextChange,
             modifier = Modifier.weight(1f),
             // 生成中发送的消息会排队，等这一轮结束后再发
             placeholder = {
@@ -460,8 +496,204 @@ private fun ReplyBar(
                 Icon(HugeIcons.Stop, contentDescription = stringResource(R.string.stop))
             }
         }
-        FilledIconButton(onClick = ::send, enabled = text.isNotBlank()) {
+        FilledIconButton(onClick = ::send, enabled = text.isNotBlank() || canSendEmpty) {
             Icon(HugeIcons.ArrowUp02, contentDescription = stringResource(R.string.send))
+        }
+    }
+}
+
+/**
+ * 输入框上方那一行：左边是刚截的图，中间是当前助手的快捷消息，
+ * 右边是模型、推理强度和扩展管理。
+ *
+ * 模型和推理用面板内展开的横排标签而不是弹出菜单：悬浮窗是独立窗口，弹层的行为更不可控。
+ */
+@Composable
+private fun ComposerToolbar(
+    conversationId: Uuid,
+    draftImage: String?,
+    onRemoveDraft: () -> Unit,
+    onApplyQuickMessage: (String) -> Unit,
+    onManageExtensions: () -> Unit,
+) {
+    val chatService = koinInject<ChatService>()
+    val settingsStore = koinInject<SettingsStore>()
+    val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
+    val conversation by chatService.getConversationFlow(conversationId).collectAsStateWithLifecycle()
+    val assistant = settings.getAssistantOf(conversation)
+    val quickMessages = settings.getQuickMessagesOfAssistant(assistant)
+    val scope = rememberCoroutineScope()
+
+    var showModels by remember { mutableStateOf(false) }
+    var showReasoning by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (draftImage != null) {
+                DraftAttachment(image = draftImage, onRemove = onRemoveDraft)
+            }
+            LazyRow(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                items(quickMessages, key = { it.id.toString() }) { quickMessage ->
+                    ComposerChip(
+                        label = quickMessage.title.ifBlank { quickMessage.content },
+                        selected = false,
+                        onClick = { onApplyQuickMessage(quickMessage.content) },
+                    )
+                }
+            }
+            ComposerIconChip(
+                icon = HugeIcons.Zap,
+                label = stringResource(R.string.floating_chat_model),
+                selected = showModels,
+                onClick = { showModels = !showModels; showReasoning = false },
+            )
+            ComposerIconChip(
+                icon = HugeIcons.Idea,
+                label = stringResource(R.string.floating_chat_reasoning),
+                selected = showReasoning,
+                onClick = { showReasoning = !showReasoning; showModels = false },
+            )
+            ComposerIconChip(
+                icon = HugeIcons.Puzzle,
+                label = stringResource(R.string.floating_chat_extensions),
+                selected = false,
+                onClick = onManageExtensions,
+            )
+        }
+
+        if (showModels) {
+            val models = remember(settings.providers) {
+                settings.providers.flatMap { it.models }.filter { it.type == ModelType.CHAT }
+            }
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                items(models, key = { it.id.toString() }) { model ->
+                    ComposerChip(
+                        label = model.displayName.ifBlank { model.modelId },
+                        selected = model.id == assistant.chatModelId,
+                        onClick = {
+                            showModels = false
+                            scope.launch {
+                                chatService.updateChatAssistant(conversationId) { it.copy(chatModelId = model.id) }
+                            }
+                        },
+                    )
+                }
+            }
+        }
+
+        if (showReasoning) {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                items(ReasoningLevel.entries.toList(), key = { it.name }) { level ->
+                    ComposerChip(
+                        label = stringResource(level.labelRes()),
+                        selected = level == assistant.reasoningLevel,
+                        onClick = {
+                            showReasoning = false
+                            scope.launch {
+                                chatService.updateChatAssistant(conversationId) { it.copy(reasoningLevel = level) }
+                            }
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ComposerChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(50),
+        color = if (selected) {
+            MaterialTheme.colorScheme.secondaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainer
+        },
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+        )
+    }
+}
+
+@Composable
+private fun ComposerIconChip(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(50),
+        color = if (selected) {
+            MaterialTheme.colorScheme.secondaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainer
+        },
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            modifier = Modifier.padding(8.dp).size(20.dp),
+        )
+    }
+}
+
+private fun ReasoningLevel.labelRes(): Int = when (this) {
+    ReasoningLevel.OFF -> R.string.reasoning_off
+    ReasoningLevel.AUTO -> R.string.reasoning_auto
+    ReasoningLevel.LOW -> R.string.reasoning_light
+    ReasoningLevel.MEDIUM -> R.string.reasoning_medium
+    ReasoningLevel.HIGH -> R.string.reasoning_heavy
+    ReasoningLevel.XHIGH -> R.string.reasoning_xhigh
+    ReasoningLevel.MAX -> R.string.reasoning_max
+}
+
+// 截图发过来时挂在输入框上方的缩略图
+@Composable
+private fun DraftAttachment(image: String, onRemove: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(MaterialTheme.shapes.medium)
+                .background(MaterialTheme.colorScheme.surfaceContainerLowest),
+        ) {
+            AsyncImage(
+                model = image,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        IconButton(onClick = onRemove, modifier = Modifier.size(28.dp)) {
+            Icon(
+                HugeIcons.Cancel01,
+                contentDescription = stringResource(R.string.screenshot_remove_attachment),
+                modifier = Modifier.size(16.dp),
+            )
         }
     }
 }

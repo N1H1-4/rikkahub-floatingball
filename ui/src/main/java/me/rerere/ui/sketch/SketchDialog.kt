@@ -127,9 +127,9 @@ fun SketchDialog(
             modifier = Modifier.fillMaxSize(),
             color = containerColor,
         ) {
-            Column(
+            SketchBoardContent(
+                state = state,
                 modifier = Modifier
-                    .fillMaxSize()
                     // 只避开系统栏和挖孔，不管键盘：写字时键盘弹出来，画纸的大小不能跟着变
                     .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout)),
             ) {
@@ -143,24 +143,6 @@ fun SketchDialog(
                     },
                     onConfirm = { onConfirm(state.toResult()) },
                 )
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp),
-                ) {
-                    SketchCanvas(state = state, modifier = Modifier.fillMaxSize())
-                    // 浮在画纸上面而不是挤占它的位置：画纸的尺寸不能因为调色而变
-                    if (state.pickingColor) {
-                        SketchColorPicker(
-                            state = state,
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(8.dp),
-                        )
-                    }
-                }
-                SketchToolbar(state = state)
             }
         }
     }
@@ -195,11 +177,14 @@ fun SketchDialog(
 
 // 关闭、撤销、重做、清空、选画纸和确认
 @Composable
-private fun SketchTopBar(
+internal fun SketchTopBar(
     state: SketchState,
     onClose: () -> Unit,
     onChooseImage: () -> Unit,
     onConfirm: () -> Unit,
+    showPaperMenu: Boolean = true,
+    // 有底图时"什么都没画"也是一张有内容的图，不该挡住确认
+    allowEmptyConfirm: Boolean = false,
 ) {
     Row(
         modifier = Modifier
@@ -220,10 +205,12 @@ private fun SketchTopBar(
         IconButton(onClick = state::clear, enabled = !state.isBlank) {
             Icon(HugeIcons.Delete02, contentDescription = stringResource(R.string.sketch_dialog_clear))
         }
-        SketchPaperMenu(state = state, onChooseImage = onChooseImage)
+        if (showPaperMenu) {
+            SketchPaperMenu(state = state, onChooseImage = onChooseImage)
+        }
         InputModeButton(state = state)
         Spacer(Modifier.weight(1f))
-        FilledIconButton(onClick = onConfirm, enabled = !state.isBlank) {
+        FilledIconButton(onClick = onConfirm, enabled = allowEmptyConfirm || !state.isBlank) {
             Icon(HugeIcons.Tick02, contentDescription = stringResource(android.R.string.ok))
         }
     }
@@ -255,6 +242,41 @@ private fun InputModeButton(state: SketchState) {
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/**
+ * 画板主体：顶栏、画纸（含调色板）和工具栏。
+ *
+ * 外层的窗口（Dialog、截图标注页）由调用方提供，两边共用同一套画笔和工具栏。
+ * [modifier] 由调用方决定要不要避开系统栏 —— 写字时键盘弹出，画纸大小不能跟着变。
+ */
+@Composable
+internal fun SketchBoardContent(
+    state: SketchState,
+    modifier: Modifier = Modifier,
+    topBar: @Composable () -> Unit,
+) {
+    Column(modifier = modifier.fillMaxSize()) {
+        topBar()
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp),
+        ) {
+            SketchCanvas(state = state, modifier = Modifier.fillMaxSize())
+            // 浮在画纸上面而不是挤占它的位置：画纸的尺寸不能因为调色而变
+            if (state.pickingColor) {
+                SketchColorPicker(
+                    state = state,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(8.dp),
+                )
+            }
+        }
+        SketchToolbar(state = state)
     }
 }
 

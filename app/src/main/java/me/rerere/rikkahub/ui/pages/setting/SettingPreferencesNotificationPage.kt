@@ -35,8 +35,10 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.DisplaySetting
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceButtons
 import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceLabel
@@ -76,6 +78,7 @@ fun SettingPreferencesNotificationPage(vm: SettingVM = koinViewModel()) {
     PermissionManager(permissionState = permissionState)
 
     val context = LocalContext.current
+    val navController = LocalNavController.current
     var canDrawOverlays by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
     // 从系统设置页授权回来后刷新
     LifecycleResumeEffect(Unit) {
@@ -173,6 +176,14 @@ fun SettingPreferencesNotificationPage(vm: SettingVM = koinViewModel()) {
                             Text(stringResource(R.string.setting_page_preferences_notification_floating_window_desc))
                         },
                         headlineContent = { Text(stringResource(R.string.setting_page_preferences_notification_floating_window)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingDesktopPet) },
+                        supportingContent = {
+                            Text(stringResource(R.string.setting_page_preferences_desktop_pet_desc))
+                        },
+                        headlineContent = { Text(stringResource(R.string.setting_page_preferences_desktop_pet)) },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, contentDescription = null) },
                     )
                     if (displaySetting.enableFloatingChatWindow && !canDrawOverlays) {
                         item(
