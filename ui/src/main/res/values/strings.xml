@@ -43,5 +43,6 @@
   <string name="screenshot_editor_ratio_free">Free</string>
   <string name="screenshot_editor_size_title">Selection size</string>
   <string name="screenshot_editor_width">Width</string>
+  <string name="screenshot_editor_drawing_hint">Annotating · tap Select to adjust the area</string>
   <string name="screenshot_editor_height">Height</string>
 </resources>

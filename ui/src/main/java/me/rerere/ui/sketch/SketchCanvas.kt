@@ -63,6 +63,10 @@ internal fun SketchCanvas(
     modifier: Modifier = Modifier,
     // 关掉后只负责把已有笔画画出来，不接触摸：截图编辑器在框选模式下要它让位给裁剪框
     interactive: Boolean = true,
+    // 手写笔模式下手指本来用于平移画纸。截图编辑器让画布把这段手势转交给自己，
+    // 用来移动/拉伸选框——画布是唯一区分笔和手指的地方，交给它就只有一个触摸归属方。
+    onFingerDrag: ((position: Offset) -> Unit)? = null,
+    onFingerDragEnd: (() -> Unit)? = null,
 ) {
     Box(
         modifier = modifier.onSizeChanged {
@@ -99,7 +103,26 @@ internal fun SketchCanvas(
                                 !eraserPointer
                             ) {
                                 down.consume()
-                                if (state.transformEnabled) moveCanvas(state, size.toSize())
+                                if (onFingerDrag != null) {
+                                    val w = size.width.toFloat()
+                                    val h = size.height.toFloat()
+                                    onFingerDrag(Offset(down.position.x / w, down.position.y / h))
+                                    try {
+                                        while (true) {
+                                            val change = awaitPointerEvent(PointerEventPass.Initial)
+                                                .changes.firstOrNull { it.id == down.id } ?: break
+                                            if (!change.pressed) break
+                                            change.consume()
+                                            onFingerDrag(
+                                                Offset(change.position.x / w, change.position.y / h)
+                                            )
+                                        }
+                                    } finally {
+                                        onFingerDragEnd?.invoke()
+                                    }
+                                } else if (state.transformEnabled) {
+                                    moveCanvas(state, size.toSize())
+                                }
                                 return@awaitEachGesture
                             }
                             val tool = if (eraserPointer) SketchTool.Eraser else state.tool
@@ -273,3 +296,4 @@ internal fun DrawScope.drawSketch(
     }
     drawIntoCanvas { it.restore() }
 }
+

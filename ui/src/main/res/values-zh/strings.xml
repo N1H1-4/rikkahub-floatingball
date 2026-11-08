@@ -43,5 +43,6 @@
   <string name="screenshot_editor_ratio_free">自由</string>
   <string name="screenshot_editor_size_title">选区大小</string>
   <string name="screenshot_editor_width">宽度</string>
+  <string name="screenshot_editor_drawing_hint">标注中 · 点「框选」可调整范围</string>
   <string name="screenshot_editor_height">高度</string>
 </resources>

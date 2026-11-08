@@ -61,6 +61,7 @@ private const val TAG = "ChatFloatingWindows"
 private const val BUBBLE_TAG = "chat_floating_bubble"
 private const val PANEL_TAG = "chat_floating_panel"
 private const val PANEL_TOP_OFFSET_DP = 8f
+private const val PANEL_MAX_WIDTH_DP = 560f
 
 /**
  * 把 [ChatFloatingTracker] 的结果显示成系统悬浮窗：收起时是贴边的小图标，展开是固定在顶部的面板。
@@ -176,6 +177,8 @@ class ChatFloatingWindows(
                         tracker.clearDraftImage()
                     },
                     onResumeQueue = { chatService.resumeMessageQueue(conversationId) },
+                    // 拖动时必须关掉动画：带动画的 moveBy 每帧都在追一个刚被顶掉的目标，看起来就像没动
+                    onMoveWindow = { dx, dy -> panel?.moveBy(dx, dy, animate = false) },
                 )
             }
         }
@@ -187,8 +190,9 @@ class ChatFloatingWindows(
             layoutParams {
                 // 面板里有输入框，窗口要能获得焦点才能弹键盘；收起时窗口是 GONE，不会抢走其他应用的焦点
                 it.flags = it.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
-                // wrap_content 的窗口会先按对话框宽度（约 320dp）测量，面板会被压窄
-                it.width = WindowManager.LayoutParams.MATCH_PARENT
+                // 不能铺满屏宽：窗口和屏幕一样宽时只能上下移动，左右会被夹死。
+                // wrap_content 又会先按对话框宽度（约 320dp）测量把面板压窄，所以给一个固定宽度。
+                it.width = panelWindowWidth()
             }
             onBackPressed {
                 tracker.collapse()
@@ -237,6 +241,25 @@ class ChatFloatingWindows(
             conversationIntent(context, conversationId.toString(), draftText, draftImage)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
+    }
+
+    // 面板窗口宽度：内容最多 560dp，屏幕更窄时按屏幕宽度留 16dp 边距
+    private fun panelWindowWidth(): Int {
+        val density = context.resources.displayMetrics.density
+        val screenWidth = safeScreenWidth()
+        return (PANEL_MAX_WIDTH_DP * density)
+            .toInt()
+            .coerceAtMost((screenWidth - 16 * density).toInt())
+            .coerceAtLeast((240 * density).toInt())
+    }
+
+    // 面板窗口和屏幕一样宽时只能上下移动，这里取可用宽度（去掉系统栏）
+    private fun safeScreenWidth(): Int {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return context.resources.displayMetrics.widthPixels
+        val metrics = context.getSystemService(WindowManager::class.java).currentWindowMetrics
+        val insets = WindowInsetsCompat.toWindowInsetsCompat(metrics.windowInsets)
+            .getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+        return metrics.bounds.width() - insets.left - insets.right
     }
 
     private fun dp(value: Float): Float = value * context.resources.displayMetrics.density

@@ -41,6 +41,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,7 +81,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-private val HandleTouchRadius = 24.dp
+private val HandleTouchRadius = 30.dp
 private const val MinSelectionPx = 48f
 
 private enum class SelectionTarget { TopLeft, TopRight, BottomLeft, BottomRight, Move, New }
@@ -121,6 +122,12 @@ fun ScreenshotEditor(
     var showSizeDialog by remember { mutableStateOf(false) }
     val handleRadius = with(LocalDensity.current) { HandleTouchRadius.toPx() }
 
+    // 手写笔模式下，画布会把手指拖动的归一化坐标转交过来操作选框
+    var fingerActive by remember { mutableStateOf(false) }
+    var fingerMode by remember { mutableStateOf(SelectionTarget.New) }
+    var fingerBase by remember { mutableStateOf<Rect?>(null) }
+    var fingerStart by remember { mutableStateOf(Offset.Zero) }
+
     BoxWithConstraints(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         val containerWidth = constraints.maxWidth.toFloat()
         val containerHeight = constraints.maxHeight.toFloat()
@@ -146,20 +153,73 @@ fun ScreenshotEditor(
             modifier = Modifier.fillMaxSize(),
         )
 
-        // 标注层：只在标注模式下接触摸，框选模式下只负责把已画的笔迹显示出来
+        // 画布只在标注模式下接触摸；框选模式下它是纯渲染层
         SketchCanvas(
             state = state,
             modifier = Modifier.fillMaxSize(),
             interactive = annotating,
+            onFingerDrag = { normalized ->
+                val position = Offset(
+                    imageBounds.left + normalized.x * imageBounds.width,
+                    imageBounds.top + normalized.y * imageBounds.height,
+                )
+                if (!fingerActive) {
+                    fingerActive = true
+                    val current = selection
+                    fingerBase = current
+                    fingerStart = position
+                    fingerMode = if (current == null) {
+                        SelectionTarget.New
+                    } else {
+                        selectionTargetAt(position, current, handleRadius)
+                    }
+                } else {
+                    selection = resolveSelection(
+                        mode = fingerMode,
+                        base = fingerBase,
+                        start = fingerStart,
+                        total = position - fingerStart,
+                        bounds = imageBounds,
+                    )
+                }
+            },
+            onFingerDragEnd = {
+                fingerActive = false
+                val current = selection
+                if (current != null &&
+                    (current.width < MinSelectionPx || current.height < MinSelectionPx)
+                ) {
+                    selection = null
+                }
+            },
         )
 
         SelectionLayer(
             selection = selection,
             bounds = imageBounds,
             handleRadius = handleRadius,
+            // 框选模式下才接管触摸；画笔/橡皮/文字模式下全部让给画布
             interactive = !annotating,
             onChange = { selection = it },
         )
+
+        // 标注模式提示：这时候选框不接管触摸，避免用户以为框坏了
+        if (annotating) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 64.dp),
+                shape = MaterialTheme.shapes.extraLarge,
+                color = MaterialTheme.colorScheme.secondaryContainer,
+            ) {
+                Text(
+                    text = stringResource(R.string.screenshot_editor_drawing_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+        }
 
         // 顶部胶囊：还没有选区时点哪都是"选画幅"；有选区时点数字改尺寸，点三角换比例
         val currentSelection = selection
@@ -415,9 +475,13 @@ fun ScreenshotEditor(
             )
         }
     }
+
+    // 文字工具：点完画面后弹输入框，和聊天里的画板同一套
+    if (state.writingAt != null) {
+        SketchTextInput(onConfirm = state::write, onDismiss = state::cancelText)
+    }
 }
 
-/** 整张截图（含标注）渲染出来后按框选范围裁切 */
 private fun exported(
     source: Bitmap,
     state: SketchState,
@@ -534,79 +598,55 @@ private fun SelectionLayer(
     interactive: Boolean,
     onChange: (Rect?) -> Unit,
 ) {
-    var target by remember { mutableStateOf(SelectionTarget.New) }
-    var newAnchor by remember { mutableStateOf(Offset.Zero) }
-    var newDelta by remember { mutableStateOf(Offset.Zero) }
+    // pointerInput 的协程只在 key 变化时重建，闭包里捕获的参数会一直是旧值。
+    // selection 每帧都在变，必须通过 rememberUpdatedState 取最新的，否则框内按下
+    // 永远被判定成"框外"，表现为拖动变成了重新拉框。
+    val latestSelection by rememberUpdatedState(selection)
+
+    var mode by remember { mutableStateOf(SelectionTarget.New) }
+    var baseSelection by remember { mutableStateOf<Rect?>(null) }
+    var startPosition by remember { mutableStateOf(Offset.Zero) }
+    var moved by remember { mutableStateOf(false) }
 
     Canvas(
         modifier = Modifier
             .fillMaxSize()
             .then(
                 if (!interactive) {
+                    // 标注模式：这个节点必须完全不存在，否则它会成为最上层命中目标，
+                    // 把本该给画布的触摸全吞掉（Compose 只把触摸交给最上面的兄弟节点）
                     Modifier
                 } else {
                     Modifier.pointerInput(bounds, handleRadius) {
                         awaitEachGesture {
-                            // 不等 touch slop：按下就开始，框选要跟手，也不能被画布的触摸事件带偏
+                            // 按下即响应，不等 touch slop
                             val down = awaitFirstDown(requireUnconsumed = false)
-                            val startPosition = down.position
-                            val current = selection
-                            val mode = if (current == null) {
+                            down.consume()
+                            val snapshot = latestSelection
+                            val start = down.position
+                            baseSelection = snapshot
+                            startPosition = start
+                            mode = if (snapshot == null) {
                                 SelectionTarget.New
                             } else {
-                                selectionTargetAt(startPosition, current, handleRadius)
+                                selectionTargetAt(start, snapshot, handleRadius)
                             }
-                            target = mode
-                            if (mode == SelectionTarget.New) {
-                                newAnchor = startPosition
-                                newDelta = Offset.Zero
-                                onChange(Rect(startPosition, startPosition))
-                            }
-                            down.consume()
+                            moved = false
 
-                            var moved = false
+                            // 全程用"相对按下点的总位移"算，不做增量累加，指针丢事件也不会跑偏
                             while (true) {
                                 val change = awaitPointerEvent()
                                     .changes
                                     .firstOrNull { it.id == down.id } ?: break
                                 if (!change.pressed) break
-                                val dragAmount = change.positionChange()
-                                if (dragAmount != Offset.Zero) moved = true
                                 change.consume()
-
-                                val base = selection
-                                val next = when (mode) {
-                                    SelectionTarget.New -> {
-                                        newDelta += dragAmount
-                                        Rect(newAnchor, newAnchor + newDelta).normalized()
-                                    }
-
-                                    SelectionTarget.Move -> base?.translate(dragAmount)
-                                    SelectionTarget.TopLeft -> base?.copy(
-                                        left = min(base.left + dragAmount.x, base.right - MinSelectionPx),
-                                        top = min(base.top + dragAmount.y, base.bottom - MinSelectionPx),
-                                    )
-
-                                    SelectionTarget.TopRight -> base?.copy(
-                                        right = max(base.right + dragAmount.x, base.left + MinSelectionPx),
-                                        top = min(base.top + dragAmount.y, base.bottom - MinSelectionPx),
-                                    )
-
-                                    SelectionTarget.BottomLeft -> base?.copy(
-                                        left = min(base.left + dragAmount.x, base.right - MinSelectionPx),
-                                        bottom = max(base.bottom + dragAmount.y, base.top + MinSelectionPx),
-                                    )
-
-                                    SelectionTarget.BottomRight -> base?.copy(
-                                        right = max(base.right + dragAmount.x, base.left + MinSelectionPx),
-                                        bottom = max(base.bottom + dragAmount.y, base.top + MinSelectionPx),
-                                    )
-                                }?.clampTo(bounds)
-                                onChange(next)
+                                val total = change.position - startPosition
+                                if (total.getDistance() > 2f) moved = true
+                                onChange(resolveSelection(mode, baseSelection, startPosition, total, bounds))
                             }
 
-                            // 误触级别的框选直接丢掉，免得留下一个几十像素的选区
-                            val final = selection
+                            // 误触级别的小框直接丢掉，免得留下一个几十像素的选区
+                            val final = latestSelection
                             if (mode == SelectionTarget.New && !moved) {
                                 onChange(null)
                             } else if (final != null &&
@@ -635,13 +675,50 @@ private fun SelectionLayer(
             size = current.size,
             style = Stroke(width = 2.dp.toPx()),
         )
-        if (interactive) {
-            val handle = 5.dp.toPx()
-            listOf(current.topLeft, current.topRight, current.bottomLeft, current.bottomRight).forEach { corner ->
-                drawCircle(Color.White, radius = handle, center = corner)
-            }
+        val handle = 7.dp.toPx()
+        listOf(current.topLeft, current.topRight, current.bottomLeft, current.bottomRight).forEach { corner ->
+            drawCircle(Color.White, radius = handle, center = corner)
         }
     }
+}
+
+/** 根据拖动模式把"起点 + 总位移"换算成新选区，纯函数，方便对照 */
+private fun resolveSelection(
+    mode: SelectionTarget,
+    base: Rect?,
+    start: Offset,
+    total: Offset,
+    bounds: Rect,
+): Rect? {
+    if (mode == SelectionTarget.New) {
+        return Rect(start, start + total).normalized().clampTo(bounds)
+    }
+    if (base == null) return null
+    val next = when (mode) {
+        SelectionTarget.Move -> base.translate(total)
+        SelectionTarget.TopLeft -> base.copy(
+            left = min(base.left + total.x, base.right - MinSelectionPx),
+            top = min(base.top + total.y, base.bottom - MinSelectionPx),
+        )
+
+        SelectionTarget.TopRight -> base.copy(
+            right = max(base.right + total.x, base.left + MinSelectionPx),
+            top = min(base.top + total.y, base.bottom - MinSelectionPx),
+        )
+
+        SelectionTarget.BottomLeft -> base.copy(
+            left = min(base.left + total.x, base.right - MinSelectionPx),
+            bottom = max(base.bottom + total.y, base.top + MinSelectionPx),
+        )
+
+        SelectionTarget.BottomRight -> base.copy(
+            right = max(base.right + total.x, base.left + MinSelectionPx),
+            bottom = max(base.bottom + total.y, base.top + MinSelectionPx),
+        )
+
+        SelectionTarget.New -> base
+    }
+    return next.clampTo(bounds)
 }
 
 @Composable

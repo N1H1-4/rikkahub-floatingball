@@ -15,12 +15,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,6 +39,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,6 +48,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -56,9 +62,12 @@ import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,6 +85,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Alert01
 import me.rerere.hugeicons.stroke.ArrowUp02
+import me.rerere.hugeicons.stroke.Brain02
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Fullscreen
 import me.rerere.hugeicons.stroke.Remove01
@@ -92,15 +102,21 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
 import me.rerere.rikkahub.data.model.GenerationPhase
 import me.rerere.rikkahub.data.model.getAssistantOf
+import me.rerere.rikkahub.data.model.getChatModelOf
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.drawAppLogo
 import me.rerere.rikkahub.ui.components.ui.logoMorphShape
 import me.rerere.rikkahub.ui.components.ui.rememberAppLogoLayers
 import me.rerere.rikkahub.ui.components.richtext.MaterialMarkdown
+import me.rerere.ui.icons.ReasoningHigh
+import me.rerere.ui.icons.ReasoningLow
+import me.rerere.ui.icons.ReasoningMedium
 import org.koin.compose.koinInject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.uuid.Uuid
@@ -216,6 +232,8 @@ fun ChatFloatingPanel(
     /** 截图发过来时先挂在这里的图片，发出后由调用方清掉 */
     draftImage: String? = null,
     onRemoveDraft: () -> Unit = {},
+    /** 拖顶部的小横线时把窗口整体挪动 (dx, dy) */
+    onMoveWindow: (Float, Float) -> Unit = { _, _ -> },
 ) {
     // 输入框内容提到这一层：点全屏要把它带进聊天页，不能丢
     var replyText by rememberSaveable(state.conversationId) { mutableStateOf("") }
@@ -235,6 +253,7 @@ fun ChatFloatingPanel(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                PanelDragHandle(onMove = onMoveWindow)
                 PanelHeader(
                     state = state,
                     onOpenConversation = { onOpenConversation(replyText) },
@@ -273,7 +292,6 @@ fun ChatFloatingPanel(
                     draftImage = draftImage,
                     onRemoveDraft = onRemoveDraft,
                     onApplyQuickMessage = { replyText = it },
-                    onManageExtensions = { onOpenConversation(replyText) },
                 )
                 ReplyBar(
                     text = replyText,
@@ -288,6 +306,31 @@ fun ChatFloatingPanel(
                 )
             }
         }
+    }
+}
+
+// 顶部的小横线：拖它可以把整个悬浮窗挪走
+@Composable
+private fun PanelDragHandle(onMove: (Float, Float) -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(16.dp)
+            .pointerInput(Unit) {
+                detectDragGestures { change, dragAmount ->
+                    change.consume()
+                    onMove(dragAmount.x, dragAmount.y)
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .width(36.dp)
+                .height(4.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)),
+        )
     }
 }
 
@@ -504,9 +547,9 @@ private fun ReplyBar(
 
 /**
  * 输入框上方那一行：左边是刚截的图，中间是当前助手的快捷消息，
- * 右边是模型、推理强度和扩展管理。
+ * 右边是模型和思考深度。
  *
- * 模型和推理用面板内展开的横排标签而不是弹出菜单：悬浮窗是独立窗口，弹层的行为更不可控。
+ * 模型列表和思考深度滑块都在面板内就地展开：悬浮窗是独立窗口，弹出式面板的行为更不可控。
  */
 @Composable
 private fun ComposerToolbar(
@@ -514,13 +557,13 @@ private fun ComposerToolbar(
     draftImage: String?,
     onRemoveDraft: () -> Unit,
     onApplyQuickMessage: (String) -> Unit,
-    onManageExtensions: () -> Unit,
 ) {
     val chatService = koinInject<ChatService>()
     val settingsStore = koinInject<SettingsStore>()
     val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
     val conversation by chatService.getConversationFlow(conversationId).collectAsStateWithLifecycle()
     val assistant = settings.getAssistantOf(conversation)
+    val model = settings.getChatModelOf(conversation)
     val quickMessages = settings.getQuickMessagesOfAssistant(assistant)
     val scope = rememberCoroutineScope()
 
@@ -548,66 +591,115 @@ private fun ComposerToolbar(
                     )
                 }
             }
-            ComposerIconChip(
-                icon = HugeIcons.Zap,
+            // 模型：显示当前模型的图标；没选模型时用大脑图标
+            ComposerIconButton(
                 label = stringResource(R.string.floating_chat_model),
                 selected = showModels,
-                onClick = { showModels = !showModels; showReasoning = false },
-            )
-            ComposerIconChip(
-                icon = HugeIcons.Idea,
+                onClick = {
+                    showModels = !showModels
+                    showReasoning = false
+                },
+            ) {
+                if (model != null) {
+                    AutoAIIcon(
+                        name = model.modelId,
+                        modifier = Modifier.size(24.dp),
+                        color = Color.Transparent,
+                    )
+                } else {
+                    Icon(HugeIcons.Brain02, contentDescription = null, modifier = Modifier.size(20.dp))
+                }
+            }
+            // 思考深度：图标跟着档位一起变
+            ComposerIconButton(
                 label = stringResource(R.string.floating_chat_reasoning),
                 selected = showReasoning,
-                onClick = { showReasoning = !showReasoning; showModels = false },
-            )
-            ComposerIconChip(
-                icon = HugeIcons.Puzzle,
-                label = stringResource(R.string.floating_chat_extensions),
-                selected = false,
-                onClick = onManageExtensions,
-            )
+                onClick = {
+                    showReasoning = !showReasoning
+                    showModels = false
+                },
+            ) {
+                Icon(assistant.reasoningLevel.icon(), contentDescription = null, modifier = Modifier.size(20.dp))
+            }
         }
 
         if (showModels) {
             val models = remember(settings.providers) {
                 settings.providers.flatMap { it.models }.filter { it.type == ModelType.CHAT }
             }
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                items(models, key = { it.id.toString() }) { model ->
-                    ComposerChip(
-                        label = model.displayName.ifBlank { model.modelId },
-                        selected = model.id == assistant.chatModelId,
-                        onClick = {
-                            showModels = false
-                            scope.launch {
-                                chatService.updateChatAssistant(conversationId) { it.copy(chatModelId = model.id) }
+            LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp)) {
+                items(models, key = { it.id.toString() }) { item ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showModels = false
+                                scope.launch {
+                                    chatService.updateChatAssistant(conversationId) {
+                                        it.copy(chatModelId = item.id)
+                                    }
+                                }
                             }
-                        },
-                    )
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        AutoAIIcon(
+                            name = item.modelId,
+                            modifier = Modifier.size(24.dp),
+                            color = Color.Transparent,
+                        )
+                        Text(
+                            text = item.displayName.ifBlank { item.modelId },
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (item.id == model?.id) {
+                            Icon(HugeIcons.Tick01, contentDescription = null, modifier = Modifier.size(16.dp))
+                        }
+                    }
                 }
             }
         }
 
         if (showReasoning) {
-            LazyRow(
+            val levels = ReasoningLevel.entries
+            var sliderValue by remember(assistant.reasoningLevel) {
+                mutableFloatStateOf(
+                    levels.indexOf(assistant.reasoningLevel).toFloat().coerceAtLeast(0f)
+                )
+            }
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(ReasoningLevel.entries.toList(), key = { it.name }) { level ->
-                    ComposerChip(
-                        label = stringResource(level.labelRes()),
-                        selected = level == assistant.reasoningLevel,
-                        onClick = {
-                            showReasoning = false
-                            scope.launch {
-                                chatService.updateChatAssistant(conversationId) { it.copy(reasoningLevel = level) }
+                Icon(
+                    assistant.reasoningLevel.icon(),
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+                Slider(
+                    value = sliderValue,
+                    onValueChange = { sliderValue = it },
+                    onValueChangeFinished = {
+                        val level = levels[sliderValue.roundToInt().coerceIn(0, levels.lastIndex)]
+                        scope.launch {
+                            chatService.updateChatAssistant(conversationId) {
+                                it.copy(reasoningLevel = level)
                             }
-                        },
-                    )
-                }
+                        }
+                    },
+                    valueRange = 0f..levels.lastIndex.toFloat(),
+                    steps = (levels.size - 2).coerceAtLeast(0),
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = stringResource(assistant.reasoningLevel.labelRes()),
+                    style = MaterialTheme.typography.labelMedium,
+                )
             }
         }
     }
@@ -635,11 +727,11 @@ private fun ComposerChip(label: String, selected: Boolean, onClick: () -> Unit) 
 }
 
 @Composable
-private fun ComposerIconChip(
-    icon: ImageVector,
+private fun ComposerIconButton(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
+    content: @Composable () -> Unit,
 ) {
     Surface(
         onClick = onClick,
@@ -650,12 +742,25 @@ private fun ComposerIconChip(
             MaterialTheme.colorScheme.surfaceContainer
         },
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            modifier = Modifier.padding(8.dp).size(20.dp),
-        )
+        Box(
+            modifier = Modifier
+                .padding(6.dp)
+                .size(24.dp)
+                .semantics { contentDescription = label },
+            contentAlignment = Alignment.Center,
+        ) {
+            content()
+        }
     }
+}
+
+// 思考深度的图标跟着档位变，和聊天输入框里那个保持一致
+private fun ReasoningLevel.icon(): ImageVector = when (this) {
+    ReasoningLevel.OFF -> HugeIcons.Brain02
+    ReasoningLevel.AUTO -> HugeIcons.Brain02
+    ReasoningLevel.LOW -> ReasoningLow
+    ReasoningLevel.MEDIUM -> ReasoningMedium
+    ReasoningLevel.HIGH, ReasoningLevel.XHIGH, ReasoningLevel.MAX -> ReasoningHigh
 }
 
 private fun ReasoningLevel.labelRes(): Int = when (this) {
