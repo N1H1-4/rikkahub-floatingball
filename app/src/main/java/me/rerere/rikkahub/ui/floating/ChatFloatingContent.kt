@@ -412,6 +412,8 @@ private fun MessagePreview(text: String, isReasoning: Boolean, generating: Boole
             content = text,
             style = MaterialTheme.typography.bodyMedium,
             streaming = generating,
+            // 悬浮窗里没有 LocalSettings，公式渲染在这里单独打开
+            renderMath = true,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 200.dp)

@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -41,6 +42,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import me.rerere.bettertext.latex.LatexInline
 import me.rerere.bettertext.markdown.MarkdownBlock
 import me.rerere.bettertext.markdown.MarkdownComponents
 import me.rerere.bettertext.markdown.MarkdownInline
@@ -75,9 +77,29 @@ fun MaterialMarkdown(
     softBreakAsLineBreak: Boolean = true,
     streaming: Boolean = false,
     onLinkClick: ((url: String) -> Unit)? = null,
+    /** 是否渲染 LaTeX 公式。默认不渲染（显示源码），悬浮窗这类没有 LocalSettings 的地方单独打开 */
+    renderMath: Boolean = false,
 ) {
     val merged = LocalTextStyle.current.merge(style)
     val resolved = merged.copy(color = merged.color.takeOrElse { LocalContentColor.current })
+    val context = LocalContext.current
+    val resolvedComponents = if (renderMath) {
+        remember(components, context) {
+            MarkdownComponents(
+                codeBlock = components.codeBlock,
+                table = components.table,
+                image = components.image,
+                mathBlock = { formula -> MathBlock(latex = formula, modifier = Modifier.fillMaxWidth()) },
+                details = components.details,
+                inlineMath = { formula -> LatexInline.cached(formula, context) },
+                inlineLink = components.inlineLink,
+                inlineCodePrefix = components.inlineCodePrefix,
+                textDecorations = components.textDecorations,
+            )
+        }
+    } else {
+        components
+    }
     // 插槽里的组件（代码块、表格工具栏等）用 Material 的 Text，让它们也拿到正文样式
     ProvideTextStyle(resolved) {
         BetterMarkdown(
@@ -85,7 +107,7 @@ fun MaterialMarkdown(
             modifier = modifier,
             style = resolved,
             theme = theme,
-            components = components,
+            components = resolvedComponents,
             softBreakAsLineBreak = softBreakAsLineBreak,
             streaming = streaming,
             onLinkClick = onLinkClick,
