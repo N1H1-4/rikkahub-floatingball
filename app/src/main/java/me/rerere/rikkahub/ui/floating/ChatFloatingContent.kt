@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.ui.floating
 
+import android.view.MotionEvent
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.infiniteRepeatable
@@ -68,6 +70,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
@@ -128,6 +131,10 @@ import kotlin.uuid.Uuid
 
 // 和 Material3 LoadingIndicator 的参数一致；放宽 visibilityThreshold 让低阻尼弹簧在间隔内结束
 private val MorphSpring = spring<Float>(dampingRatio = 0.6f, stiffness = 200f, visibilityThreshold = 0.1f)
+// 弧线把手相对窗口右下角的内缩：卡片内边距 12/26dp + 圆角 28dp，盒子 30dp
+private val ArcInsetStart = 10.dp
+private val ArcInsetBottom = 24.dp
+
 private const val MORPH_INTERVAL_MILLIS = 650L
 private const val SPIN_DURATION_MILLIS = 4666
 
@@ -239,19 +246,27 @@ fun ChatFloatingPanel(
     onRemoveDraft: () -> Unit = {},
     /** 拖顶部的小横线时把窗口整体挪动 (dx, dy) */
     onMoveWindow: (Float, Float) -> Unit = { _, _ -> },
-    /** 拖左下/右下角的弧线时改窗口宽度，参数是这一下的水平位移 */
-    onResizeWidth: (Float) -> Unit = {},
+    /** 窗口高度是否已被手动指定：指定后内容要填满窗口，而不是跟着内容走 */
+    heightPinned: Boolean = false,
+    /** 拖角缩放：按下 / 移动（屏幕坐标）/ 松手 */
+    onResizeBegin: () -> Unit = {},
+    onResizeMove: (screenX: Float, screenY: Float, vertical: Boolean, mirrored: Boolean) -> Unit =
+        { _, _, _, _ -> },
+    onResizeEnd: () -> Unit = {},
 ) {
     // 输入框内容提到这一层：点全屏要把它带进聊天页，不能丢
     var replyText by rememberSaveable(state.conversationId) { mutableStateOf("") }
 
     // 窗口和屏幕一样宽，大屏上限制宽度并居中
-    Box(modifier = Modifier.fillMaxWidth().heightIn(max = maxHeight), contentAlignment = Alignment.TopCenter) {
+    Box(
+        modifier = if (heightPinned) Modifier.fillMaxSize() else Modifier.fillMaxWidth().heightIn(max = maxHeight),
+        contentAlignment = Alignment.TopCenter,
+    ) {
         Surface(
             modifier = Modifier
                 .widthIn(max = 560.dp)
                 .fillMaxWidth()
-                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 18.dp),
+                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 26.dp),
             shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             shadowElevation = 8.dp,
@@ -315,54 +330,84 @@ fun ChatFloatingPanel(
         }
 
         // 左右下角的弧线：拖动改窗口宽度，和系统小窗的手感一致
-        ResizeArc(
-            modifier = Modifier.align(Alignment.BottomStart),
+        ResizeHandle(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = ArcInsetStart, bottom = ArcInsetBottom),
             mirrored = true,
-            onDrag = onResizeWidth,
+            onBegin = onResizeBegin,
+            onMove = { x, y -> onResizeMove(x, y, false, true) },
+            onEnd = onResizeEnd,
         )
-        ResizeArc(
-            modifier = Modifier.align(Alignment.BottomEnd),
+        ResizeHandle(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = ArcInsetStart, bottom = ArcInsetBottom),
             mirrored = false,
-            onDrag = onResizeWidth,
+            onBegin = onResizeBegin,
+            onMove = { x, y -> onResizeMove(x, y, true, false) },
+            onEnd = onResizeEnd,
         )
     }
 }
 
 /**
- * 角落里的缩放把手：一小段贴角的圆弧。
- * [mirrored] 为 true 时是左下角，向右拖是缩小。
+ * 角落里的缩放把手：一段和面板圆角**同心**的弧线，只在手指按住时显示。
+ *
+ * 弧的圆心就是卡片圆角的圆心，所以它贴着圆角走，不会看起来"反方向"。
+ * 拖动直接用 MotionEvent 的屏幕坐标（rawX/rawY）：窗口会随着拖动改变尺寸，自己也在动，
+ * 用相对增量会形成反馈回环，表现就是「不跟手、抖」。
  */
 @Composable
-private fun ResizeArc(
+private fun ResizeHandle(
     modifier: Modifier = Modifier,
     mirrored: Boolean,
-    onDrag: (Float) -> Unit,
+    onBegin: () -> Unit,
+    onMove: (Float, Float) -> Unit,
+    onEnd: () -> Unit,
 ) {
-    val color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+    var pressed by remember { mutableStateOf(false) }
+    val alpha by animateFloatAsState(if (pressed) 1f else 0f, label = "resize-arc")
+    val color = MaterialTheme.colorScheme.onSurfaceVariant
+
     Canvas(
         modifier = modifier
-            .size(26.dp)
-            .pointerInput(mirrored) {
-                detectDragGestures { change, dragAmount ->
-                    change.consume()
-                    onDrag(if (mirrored) -dragAmount.x else dragAmount.x)
+            .size(30.dp)
+            .pointerInteropFilter { event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        pressed = true
+                        onBegin()
+                        true
+                    }
+
+                    MotionEvent.ACTION_MOVE -> {
+                        onMove(event.rawX, event.rawY)
+                        true
+                    }
+
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        pressed = false
+                        onEnd()
+                        true
+                    }
+
+                    else -> false
                 }
             },
     ) {
+        if (alpha <= 0.01f) return@Canvas
         val stroke = 2.5.dp.toPx()
-        val radius = size.minDimension - stroke
-        val topLeft = if (mirrored) {
-            Offset(-radius, size.height - radius)
-        } else {
-            Offset(size.width - radius, size.height - radius)
-        }
+        // 圆心落在盒子的一个角上：左下角把手用右上角当圆心，右下角把手用左上角
+        val centerX = if (mirrored) size.width else 0f
+        val centerY = 0f
         drawArc(
-            color = color,
-            startAngle = if (mirrored) 270f else 180f,
+            color = color.copy(alpha = alpha * 0.75f),
+            startAngle = if (mirrored) 90f else 0f,
             sweepAngle = 90f,
             useCenter = false,
-            topLeft = topLeft,
-            size = Size(radius * 2, radius * 2),
+            topLeft = Offset(centerX - size.width, centerY - size.height),
+            size = Size(size.width * 2, size.height * 2),
             style = Stroke(width = stroke, cap = StrokeCap.Round),
         )
     }

@@ -10,6 +10,7 @@ import android.view.WindowManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -64,6 +65,9 @@ private const val PANEL_TAG = "chat_floating_panel"
 private const val PANEL_TOP_OFFSET_DP = 8f
 private const val PANEL_MAX_WIDTH_DP = 560f
 private const val PANEL_MIN_WIDTH_DP = 320f
+private const val PANEL_COMPACT_WIDTH_DP = 380f
+private const val PANEL_MIN_HEIGHT_DP = 180f
+private const val PANEL_DEFAULT_HEIGHT_DP = 240f
 
 /**
  * 把 [ChatFloatingTracker] 的结果显示成系统悬浮窗：收起时是贴边的小图标，展开是固定在顶部的面板。
@@ -181,7 +185,10 @@ class ChatFloatingWindows(
                     onResumeQueue = { chatService.resumeInbox(conversationId) },
                     // 拖动时必须关掉动画：带动画的 moveBy 每帧都在追一个刚被顶掉的目标，看起来就像没动
                     onMoveWindow = { dx, dy -> panel?.moveBy(dx, dy, animate = false) },
-                    onResizeWidth = ::resizePanelWidth,
+                    heightPinned = panelHeightPinned.value,
+                    onResizeBegin = ::onResizeBegin,
+                    onResizeMove = ::onResizeMove,
+                    onResizeEnd = ::onResizeEnd,
                 )
             }
         }
@@ -196,6 +203,7 @@ class ChatFloatingWindows(
                 // 不能铺满屏宽：窗口和屏幕一样宽时只能上下移动，左右会被夹死。
                 // wrap_content 又会先按对话框宽度（约 320dp）测量把面板压窄，所以给一个固定宽度。
                 it.width = panelWindowWidth()
+                if (panelHeightPinned.value && panelHeightPx > 0) it.height = panelHeightPx
             }
             onBackPressed {
                 tracker.collapse()
@@ -246,27 +254,94 @@ class ChatFloatingWindows(
         )
     }
 
-    /**
-     * 拖动左右下角的弧线改变面板宽度。
-     *
-     * FloatingX 没有公开的运行时改尺寸入口，但窗口根 View 的 layoutParams 就是它自己持有的
-     * 那一份对象，改完直接 updateViewLayout 就能和它的定位逻辑保持一致（窗口是 TOP_CENTER
-     * 锚点，宽度变化后系统会自己重新居中）。
-     */
-    private fun resizePanelWidth(deltaPx: Float) {
-        val control = panel ?: return
-        val container = control.contentView?.parent as? View ?: return
-        val lp = container.layoutParams as? WindowManager.LayoutParams ?: return
-        val current = if (lp.width > 0) lp.width else panelWindowWidth()
+    // 手动改过高度之后，内容要填满窗口而不是跟着内容走
+    private val panelHeightPinned = mutableStateOf(false)
+
+    private var resizeStartWidth = 0
+    private var resizeStartHeight = 0
+    private var panelHeightPx = 0
+    private var resizeStartX = 0f
+    private var resizeStartY = 0f
+    private var resizeTracking = false
+
+    private fun panelWindow(): Pair<View, WindowManager.LayoutParams>? {
+        val control = panel ?: return null
+        val container = control.contentView?.parent as? View ?: return null
+        val lp = container.layoutParams as? WindowManager.LayoutParams ?: return null
+        return container to lp
+    }
+
+    private fun onResizeBegin() {
+        val (container, lp) = panelWindow() ?: return
+        val density = context.resources.displayMetrics.density
+        resizeStartWidth = if (lp.width > 0) lp.width else panelWindowWidth()
+        // 高度是 WRAP_CONTENT 时不知道实际值，取容器当前量出来的高度
+        resizeStartHeight = if (lp.height > 0) {
+            lp.height
+        } else {
+            container.height.takeIf { it > 0 } ?: (PANEL_DEFAULT_HEIGHT_DP * density).toInt()
+        }
+        // 等第一次 MOVE 再记基准坐标，避免 DOWN 的坐标系和 MOVE 不一致
+        resizeTracking = false
+    }
+
+    private fun onResizeMove(screenX: Float, screenY: Float, vertical: Boolean, mirrored: Boolean) {
+        val (container, lp) = panelWindow() ?: return
+        if (!resizeTracking) {
+            resizeStartX = screenX
+            resizeStartY = screenY
+            resizeTracking = true
+            return
+        }
         val density = context.resources.displayMetrics.density
         val minWidth = (PANEL_MIN_WIDTH_DP * density).toInt()
         val maxWidth = safeScreenWidth()
-        val next = (current + deltaPx.toInt()).coerceIn(minWidth, maxWidth)
-        if (next == current) return
-        lp.width = next
+
+        val dx = screenX - resizeStartX
+        // 窗口是居中锚点：手指往右拖 dx，宽度要涨 2dx 右边缘才跟得上
+        val signedDx = if (mirrored) -dx else dx
+        val nextWidth = (resizeStartWidth + signedDx * 2).toInt().coerceIn(minWidth, maxWidth)
+
+        // 缩到阈值以内就收成气泡：再窄下去图标和文字会挤在一起
+        if (nextWidth <= (PANEL_COMPACT_WIDTH_DP * density).toInt()) {
+            lp.width = panelWindowWidth()
+            runCatching {
+                context.getSystemService(WindowManager::class.java).updateViewLayout(container, lp)
+            }
+            resizeTracking = false
+            tracker.collapse()
+            return
+        }
+
+        var changed = false
+        if (nextWidth != lp.width) {
+            lp.width = nextWidth
+            changed = true
+        }
+
+        // 生成中面板高度跟着内容长，这时候手动改高度会和流式输出打架，先只允许改宽度
+        val generating = uiState.value?.generating == true
+        if (vertical && !generating) {
+            val dy = screenY - resizeStartY
+            val minHeight = (PANEL_MIN_HEIGHT_DP * density).toInt()
+            val maxHeight = safeScreenHeight() - (PANEL_TOP_OFFSET_DP * density).toInt()
+            val nextHeight = (resizeStartHeight + dy).toInt().coerceIn(minHeight, maxHeight)
+            if (nextHeight != lp.height) {
+                lp.height = nextHeight
+                panelHeightPx = nextHeight
+                panelHeightPinned.value = true
+                changed = true
+            }
+        }
+
+        if (!changed) return
         runCatching {
             context.getSystemService(WindowManager::class.java).updateViewLayout(container, lp)
-        }.onFailure { Log.w(TAG, "resizePanelWidth failed", it) }
+        }.onFailure { Log.w(TAG, "resize panel failed", it) }
+    }
+
+    private fun onResizeEnd() {
+        resizeTracking = false
     }
 
     // 面板窗口宽度：内容最多 560dp，屏幕更窄时按屏幕宽度留 16dp 边距
