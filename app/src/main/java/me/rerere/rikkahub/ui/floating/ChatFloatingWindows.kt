@@ -3,11 +3,19 @@ package me.rerere.rikkahub.ui.floating
 import android.app.Application
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import androidx.core.graphics.ColorUtils
+import androidx.compose.ui.graphics.toArgb
+import android.view.Gravity
+import android.graphics.drawable.GradientDrawable
+import android.graphics.Color as AndroidColor
+import android.graphics.PixelFormat
 import android.os.Build
 import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,6 +77,9 @@ private const val PANEL_COMPACT_WIDTH_DP = 380f
 private const val PANEL_MIN_HEIGHT_DP = 180f
 private const val PANEL_DEFAULT_HEIGHT_DP = 240f
 private const val PANEL_RESIZE_SLOP_DP = 8f
+private const val PANEL_CORNER_RADIUS_DP = 28f
+private const val PREVIEW_ALPHA = 0xE6
+private const val PREVIEW_FADE_MILLIS = 90L
 private const val RESIZE_ITERATIONS = 3
 
 /**
@@ -128,6 +139,8 @@ class ChatFloatingWindows(
     }
 
     private fun render(expanded: Boolean?) {
+        // 面板要收起/关闭时，别把拖动预览框留在屏幕上
+        if (expanded != true) hideResizePreview()
         // 后台弹不出权限申请页，没有权限就不显示
         if (expanded == null || !FxPermission.isGranted(context)) {
             bubble?.cancel()
@@ -162,6 +175,9 @@ class ChatFloatingWindows(
     private fun installPanel(): FxControl = FloatingX.install(PANEL_TAG) {
         compose {
             WindowContent { state ->
+                // 预览框要跟面板同色，这里把当前主题的面板底色记下来
+                val surfaceColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                LaunchedEffect(surfaceColor) { previewColor = surfaceColor.toArgb() }
                 val conversationId = state.conversationId
                 val draft by tracker.draftImageState.collectAsStateWithLifecycle()
                 ChatFloatingPanel(
@@ -266,11 +282,18 @@ class ChatFloatingWindows(
     private var desiredWidthPx = 0
     private var resizeStartX = 0f
     private var resizeStartY = 0f
-    private var resizeInsetLeft = 0f
-    private var resizeInsetRight = 0f
-    private var resizeInsetBottom = 0f
+    private var resizePanelX = 0
+    private var resizePanelY = 0
+    private var resizeTargetWidth = 0
+    private var resizeTargetHeight = 0
     private var resizeFromLeft = false
-    private var resizeTracking = false
+    private var resizeActive = false
+
+    // 拖动时那个同色预览框（独立窗口，不可触摸，不抢手势）
+    private var resizePreview: View? = null
+    private var previewParams: WindowManager.LayoutParams? = null
+    // 面板背景色，由 Compose 侧写进来
+    private var previewColor: Int = 0xFF2B2B2B.toInt()
 
     /**
      * 找到面板窗口的根 View 和它的 WindowManager.LayoutParams。
@@ -288,99 +311,147 @@ class ChatFloatingWindows(
         return null
     }
 
+    /**
+     * 缩放采用「拖动时只画预览框，松手才真正改窗口」：
+     * 拖动期间窗口完全不动，把手就一直贴在手指下面，不会有抢触摸、回环抖动、
+     * 或者"只有第一次生效"这类问题。
+     */
     private fun onResizeBegin(screenX: Float, screenY: Float, mirrored: Boolean) {
         val (container, lp) = panelWindow() ?: return
         val location = IntArray(2).also { container.getLocationOnScreen(it) }
-        // 记下手指到窗口四条边的距离，拖动时让这条边一直贴着手指
-        resizeInsetLeft = screenX - location[0]
-        resizeInsetRight = (location[0] + lp.width) - screenX
-        resizeInsetBottom = (location[1] + container.height) - screenY
+        resizePanelX = location[0]
+        resizePanelY = location[1]
+        resizeStartWidth = lp.width
+        resizeStartHeight = if (lp.height > 0) lp.height else container.height
         resizeStartX = screenX
         resizeStartY = screenY
+        resizeTargetWidth = resizeStartWidth
+        resizeTargetHeight = resizeStartHeight
         resizeFromLeft = mirrored
-        resizeStartHeight = if (lp.height > 0) lp.height else container.height
-        resizeTracking = true
+        resizeActive = true
+        showResizePreview(resizePanelX, resizePanelY, resizeStartWidth, resizeStartHeight)
     }
 
-    /**
-     * 拖动角把手改变尺寸。
-     *
-     * 不用「按位移换算宽度」的做法：窗口的锚点行为决定了两条边是不是同时移动，
-     * 之前按 2 倍算，拖久了把手会跑离手指，再按原位置就按空了（表现为"弧线没了"）。
-     * 这里改成绝对目标 + 迭代校正：每帧读窗口真实的屏幕位置，把手指下面那条边贴过去，
-     * 不管锚点怎么表现都能收敛。
-     */
     private fun onResizeMove(screenX: Float, screenY: Float, vertical: Boolean) {
-        if (!resizeTracking) return
-        val (container, lp) = panelWindow() ?: return
-        val wm = context.getSystemService(WindowManager::class.java)
+        if (!resizeActive) return
         val density = context.resources.displayMetrics.density
+        val dx = (screenX - resizeStartX).toInt()
+        val dy = (screenY - resizeStartY).toInt()
+
         val minWidth = (PANEL_MIN_WIDTH_DP * density).toInt()
         val maxWidth = safeScreenWidth()
-        val compactWidth = (PANEL_COMPACT_WIDTH_DP * density).toInt()
+        val width = (resizeStartWidth + if (resizeFromLeft) -dx else dx)
+            .coerceIn(minWidth, maxWidth)
 
-        val targetRight = screenX + resizeInsetRight
-        val targetLeft = screenX - resizeInsetLeft
-
-        // 缩到阈值以内就收成气泡
-        repeat(RESIZE_ITERATIONS) {
-            val location = IntArray(2).also { container.getLocationOnScreen(it) }
-            val error = if (resizeFromLeft) {
-                (location[0] - targetLeft)
-            } else {
-                (targetRight - (location[0] + lp.width))
-            }
-            if (kotlin.math.abs(error) < 1f) return@repeat
-            // 左右把手方向相反：右把手加宽度，左把手减宽度
-            val delta = if (resizeFromLeft) -error else error
-            val next = (lp.width + delta).toInt().coerceIn(minWidth, maxWidth)
-            if (next == lp.width) return@repeat
-            lp.width = next
-            desiredWidthPx = next
-            runCatching { wm.updateViewLayout(container, lp) }
+        var height = resizeStartHeight
+        val generating = uiState.value?.generating == true
+        if (vertical && !generating &&
+            kotlin.math.abs(dy) > kotlin.math.abs(dx) &&
+            kotlin.math.abs(dy) > (PANEL_RESIZE_SLOP_DP * density)
+        ) {
+            val minHeight = (PANEL_MIN_HEIGHT_DP * density).toInt()
+            val maxHeight = safeScreenHeight() - (PANEL_TOP_OFFSET_DP * density).toInt()
+            height = (resizeStartHeight + dy).coerceIn(minHeight, maxHeight)
         }
 
-        if (lp.width <= compactWidth) {
-            // 收起成气泡：窗口宽度和"期望宽度"都恢复默认，否则下次展开还是窄的
+        resizeTargetWidth = width
+        resizeTargetHeight = height
+        val x = if (resizeFromLeft) resizePanelX + resizeStartWidth - width else resizePanelX
+        showResizePreview(x, resizePanelY, width, height)
+    }
+
+    private fun onResizeEnd() {
+        if (!resizeActive) return
+        resizeActive = false
+        hideResizePreview()
+
+        val (container, lp) = panelWindow() ?: return
+        val density = context.resources.displayMetrics.density
+        val compact = (PANEL_COMPACT_WIDTH_DP * density).toInt()
+
+        // 缩到阈值以内：不真的缩，直接收成气泡
+        if (resizeTargetWidth <= compact) {
             desiredWidthPx = 0
             lp.width = panelWindowWidth()
-            runCatching { wm.updateViewLayout(container, lp) }
-            resizeTracking = false
+            runCatching {
+                context.getSystemService(WindowManager::class.java).updateViewLayout(container, lp)
+            }
             tracker.collapse()
             return
         }
 
-        // 高度只在「明显是竖着拖」时才改，横拖时写高度会触发整块重新测量
-        val generating = uiState.value?.generating == true
-        if (vertical && !generating) {
-            val dy = screenY - resizeStartY
-            val dx = screenX - resizeStartX
-            val verticalDominant = kotlin.math.abs(dy) > kotlin.math.abs(dx) &&
-                kotlin.math.abs(dy) > (PANEL_RESIZE_SLOP_DP * density)
-            if (verticalDominant) {
-                val minHeight = (PANEL_MIN_HEIGHT_DP * density).toInt()
-                val maxHeight = safeScreenHeight() - (PANEL_TOP_OFFSET_DP * density).toInt()
-                val targetBottom = screenY + resizeInsetBottom
-                repeat(RESIZE_ITERATIONS) {
-                    val location = IntArray(2).also { container.getLocationOnScreen(it) }
-                    val actualBottom = location[1] + if (lp.height > 0) lp.height else container.height
-                    val error = (targetBottom - actualBottom).toInt()
-                    if (kotlin.math.abs(error) < 1) return@repeat
-                    val next = ((if (lp.height > 0) lp.height else container.height) + error)
-                        .coerceIn(minHeight, maxHeight)
-                    if (next == lp.height) return@repeat
-                    lp.height = next
-                    panelHeightPx = next
-                    panelHeightPinned.value = true
-                    runCatching { wm.updateViewLayout(container, lp) }
-                }
+        // 尺寸没变就什么都不做（松手弹回原样）
+        val widthChanged = resizeTargetWidth != lp.width
+        val heightChanged = resizeTargetHeight != resizeStartHeight
+        if (!widthChanged && !heightChanged) return
+
+        lp.width = resizeTargetWidth
+        desiredWidthPx = resizeTargetWidth
+        if (heightChanged) {
+            lp.height = resizeTargetHeight
+            panelHeightPx = resizeTargetHeight
+            panelHeightPinned.value = true
+        }
+        runCatching {
+            context.getSystemService(WindowManager::class.java).updateViewLayout(container, lp)
+        }.onFailure { Log.w(TAG, "apply panel size failed", it) }
+    }
+
+    // ---- 拖动时的预览框 ----
+
+    private fun showResizePreview(x: Int, y: Int, width: Int, height: Int) {
+        val wm = context.getSystemService(WindowManager::class.java)
+        val params = previewParams
+        val view = resizePreview
+        if (view == null || params == null) {
+            val density = context.resources.displayMetrics.density
+            val background = GradientDrawable().apply {
+                cornerRadius = PANEL_CORNER_RADIUS_DP * density
+                setColor(ColorUtils.setAlphaComponent(previewColor, PREVIEW_ALPHA))
+                setStroke(
+                    (1.5f * density).toInt(),
+                    ColorUtils.setAlphaComponent(AndroidColor.WHITE, 0x33),
+                )
             }
+            val created = View(context).apply {
+                this.background = background
+                alpha = 0f
+                animate().alpha(1f).setDuration(PREVIEW_FADE_MILLIS).start()
+            }
+            val createdParams = WindowManager.LayoutParams(
+                width,
+                height,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT,
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                this.x = x
+                this.y = y
+            }
+            runCatching { wm.addView(created, createdParams) }
+                .onFailure { Log.w(TAG, "add resize preview failed", it) }
+            resizePreview = created
+            previewParams = createdParams
+        } else {
+            params.x = x
+            params.y = y
+            params.width = width
+            params.height = height
+            runCatching { wm.updateViewLayout(view, params) }
         }
     }
 
-    private fun onResizeEnd() {
-        resizeTracking = false
+    private fun hideResizePreview() {
+        val view = resizePreview ?: return
+        runCatching { context.getSystemService(WindowManager::class.java).removeView(view) }
+            .onFailure { Log.w(TAG, "remove resize preview failed", it) }
+        resizePreview = null
+        previewParams = null
     }
+
 
     /** 窗口隐藏过之后 updateViewLayout 可能没生效，重新显示时把记住的尺寸补上去 */
     private fun applyPanelSizeIfNeeded() {
