@@ -249,7 +249,7 @@ fun ChatFloatingPanel(
     /** 窗口高度是否已被手动指定：指定后内容要填满窗口，而不是跟着内容走 */
     heightPinned: Boolean = false,
     /** 拖角缩放：按下 / 移动（屏幕坐标）/ 松手 */
-    onResizeBegin: () -> Unit = {},
+    onResizeBegin: (screenX: Float, screenY: Float) -> Unit = { _, _ -> },
     onResizeMove: (screenX: Float, screenY: Float, vertical: Boolean, mirrored: Boolean) -> Unit =
         { _, _, _, _ -> },
     onResizeEnd: () -> Unit = {},
@@ -362,7 +362,7 @@ fun ChatFloatingPanel(
 private fun ResizeHandle(
     modifier: Modifier = Modifier,
     mirrored: Boolean,
-    onBegin: () -> Unit,
+    onBegin: (Float, Float) -> Unit,
     onMove: (Float, Float) -> Unit,
     onEnd: () -> Unit,
 ) {
@@ -377,7 +377,7 @@ private fun ResizeHandle(
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
                         pressed = true
-                        onBegin()
+                        onBegin(event.rawX, event.rawY)
                         true
                     }
 

@@ -68,6 +68,7 @@ private const val PANEL_MIN_WIDTH_DP = 320f
 private const val PANEL_COMPACT_WIDTH_DP = 380f
 private const val PANEL_MIN_HEIGHT_DP = 180f
 private const val PANEL_DEFAULT_HEIGHT_DP = 240f
+private const val PANEL_RESIZE_SLOP_DP = 8f
 
 /**
  * 把 [ChatFloatingTracker] 的结果显示成系统悬浮窗：收起时是贴边的小图标，展开是固定在顶部的面板。
@@ -138,6 +139,7 @@ class ChatFloatingWindows(
         if (expanded) {
             bubble.hide()
             (panel ?: installPanel().also { panel = it }).show()
+            applyPanelSizeIfNeeded()
         } else {
             panel?.hide()
             bubble.show()
@@ -260,6 +262,7 @@ class ChatFloatingWindows(
     private var resizeStartWidth = 0
     private var resizeStartHeight = 0
     private var panelHeightPx = 0
+    private var desiredWidthPx = 0
     private var resizeStartX = 0f
     private var resizeStartY = 0f
     private var resizeTracking = false
@@ -271,28 +274,26 @@ class ChatFloatingWindows(
         return container to lp
     }
 
-    private fun onResizeBegin() {
+    private fun onResizeBegin(screenX: Float, screenY: Float) {
         val (container, lp) = panelWindow() ?: return
         val density = context.resources.displayMetrics.density
-        resizeStartWidth = if (lp.width > 0) lp.width else panelWindowWidth()
+        resizeStartWidth = desiredWidthPx.takeIf { it > 0 }
+            ?: (if (lp.width > 0) lp.width else panelWindowWidth())
         // 高度是 WRAP_CONTENT 时不知道实际值，取容器当前量出来的高度
         resizeStartHeight = if (lp.height > 0) {
             lp.height
         } else {
             container.height.takeIf { it > 0 } ?: (PANEL_DEFAULT_HEIGHT_DP * density).toInt()
         }
-        // 等第一次 MOVE 再记基准坐标，避免 DOWN 的坐标系和 MOVE 不一致
-        resizeTracking = false
+        // 直接用按下点做基准，拖动从第一帧就跟手
+        resizeStartX = screenX
+        resizeStartY = screenY
+        resizeTracking = true
     }
 
     private fun onResizeMove(screenX: Float, screenY: Float, vertical: Boolean, mirrored: Boolean) {
         val (container, lp) = panelWindow() ?: return
-        if (!resizeTracking) {
-            resizeStartX = screenX
-            resizeStartY = screenY
-            resizeTracking = true
-            return
-        }
+        if (!resizeTracking) return
         val density = context.resources.displayMetrics.density
         val minWidth = (PANEL_MIN_WIDTH_DP * density).toInt()
         val maxWidth = safeScreenWidth()
@@ -316,21 +317,28 @@ class ChatFloatingWindows(
         var changed = false
         if (nextWidth != lp.width) {
             lp.width = nextWidth
+            desiredWidthPx = nextWidth
             changed = true
         }
 
-        // 生成中面板高度跟着内容长，这时候手动改高度会和流式输出打架，先只允许改宽度
+        // 高度只在「明显是竖着拖」时才改：
+        // 横拖时 dy≈0，一旦也去写高度就会把面板从 wrap_content 钉死，触发整块重新测量，
+        // 手势被打断后重新开始，宽度会被反复重算，表现就是抖动甚至突然缩成气泡。
         val generating = uiState.value?.generating == true
         if (vertical && !generating) {
             val dy = screenY - resizeStartY
-            val minHeight = (PANEL_MIN_HEIGHT_DP * density).toInt()
-            val maxHeight = safeScreenHeight() - (PANEL_TOP_OFFSET_DP * density).toInt()
-            val nextHeight = (resizeStartHeight + dy).toInt().coerceIn(minHeight, maxHeight)
-            if (nextHeight != lp.height) {
-                lp.height = nextHeight
-                panelHeightPx = nextHeight
-                panelHeightPinned.value = true
-                changed = true
+            val verticalDominant = kotlin.math.abs(dy) > kotlin.math.abs(dx) &&
+                kotlin.math.abs(dy) > (PANEL_RESIZE_SLOP_DP * density)
+            if (verticalDominant) {
+                val minHeight = (PANEL_MIN_HEIGHT_DP * density).toInt()
+                val maxHeight = safeScreenHeight() - (PANEL_TOP_OFFSET_DP * density).toInt()
+                val nextHeight = (resizeStartHeight + dy).toInt().coerceIn(minHeight, maxHeight)
+                if (nextHeight != lp.height) {
+                    lp.height = nextHeight
+                    panelHeightPx = nextHeight
+                    panelHeightPinned.value = true
+                    changed = true
+                }
             }
         }
 
@@ -342,6 +350,25 @@ class ChatFloatingWindows(
 
     private fun onResizeEnd() {
         resizeTracking = false
+    }
+
+    /** 窗口隐藏过之后 updateViewLayout 可能没生效，重新显示时把记住的尺寸补上去 */
+    private fun applyPanelSizeIfNeeded() {
+        val (container, lp) = panelWindow() ?: return
+        if (!container.isAttachedToWindow) return
+        var changed = false
+        if (desiredWidthPx > 0 && lp.width != desiredWidthPx) {
+            lp.width = desiredWidthPx
+            changed = true
+        }
+        if (panelHeightPinned.value && panelHeightPx > 0 && lp.height != panelHeightPx) {
+            lp.height = panelHeightPx
+            changed = true
+        }
+        if (!changed) return
+        runCatching {
+            context.getSystemService(WindowManager::class.java).updateViewLayout(container, lp)
+        }.onFailure { Log.w(TAG, "applyPanelSizeIfNeeded failed", it) }
     }
 
     // 面板窗口宽度：内容最多 560dp，屏幕更窄时按屏幕宽度留 16dp 边距
