@@ -249,9 +249,9 @@ fun ChatFloatingPanel(
     /** 窗口高度是否已被手动指定：指定后内容要填满窗口，而不是跟着内容走 */
     heightPinned: Boolean = false,
     /** 拖角缩放：按下 / 移动（屏幕坐标）/ 松手 */
-    onResizeBegin: (screenX: Float, screenY: Float) -> Unit = { _, _ -> },
-    onResizeMove: (screenX: Float, screenY: Float, vertical: Boolean, mirrored: Boolean) -> Unit =
-        { _, _, _, _ -> },
+    onResizeBegin: (screenX: Float, screenY: Float, mirrored: Boolean) -> Unit =
+        { _, _, _ -> },
+    onResizeMove: (screenX: Float, screenY: Float, vertical: Boolean) -> Unit = { _, _, _ -> },
     onResizeEnd: () -> Unit = {},
 ) {
     // 输入框内容提到这一层：点全屏要把它带进聊天页，不能丢
@@ -335,8 +335,8 @@ fun ChatFloatingPanel(
                 .align(Alignment.BottomStart)
                 .padding(start = ArcInsetStart, bottom = ArcInsetBottom),
             mirrored = true,
-            onBegin = onResizeBegin,
-            onMove = { x, y -> onResizeMove(x, y, false, true) },
+            onBegin = { x, y -> onResizeBegin(x, y, true) },
+            onMove = { x, y -> onResizeMove(x, y, false) },
             onEnd = onResizeEnd,
         )
         ResizeHandle(
@@ -344,8 +344,8 @@ fun ChatFloatingPanel(
                 .align(Alignment.BottomEnd)
                 .padding(end = ArcInsetStart, bottom = ArcInsetBottom),
             mirrored = false,
-            onBegin = onResizeBegin,
-            onMove = { x, y -> onResizeMove(x, y, true, false) },
+            onBegin = { x, y -> onResizeBegin(x, y, false) },
+            onMove = { x, y -> onResizeMove(x, y, true) },
             onEnd = onResizeEnd,
         )
     }

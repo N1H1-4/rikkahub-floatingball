@@ -69,6 +69,7 @@ private const val PANEL_COMPACT_WIDTH_DP = 380f
 private const val PANEL_MIN_HEIGHT_DP = 180f
 private const val PANEL_DEFAULT_HEIGHT_DP = 240f
 private const val PANEL_RESIZE_SLOP_DP = 8f
+private const val RESIZE_ITERATIONS = 3
 
 /**
  * 把 [ChatFloatingTracker] 的结果显示成系统悬浮窗：收起时是贴边的小图标，展开是固定在顶部的面板。
@@ -265,6 +266,10 @@ class ChatFloatingWindows(
     private var desiredWidthPx = 0
     private var resizeStartX = 0f
     private var resizeStartY = 0f
+    private var resizeInsetLeft = 0f
+    private var resizeInsetRight = 0f
+    private var resizeInsetBottom = 0f
+    private var resizeFromLeft = false
     private var resizeTracking = false
 
     /**
@@ -283,80 +288,94 @@ class ChatFloatingWindows(
         return null
     }
 
-    private fun onResizeBegin(screenX: Float, screenY: Float) {
+    private fun onResizeBegin(screenX: Float, screenY: Float, mirrored: Boolean) {
         val (container, lp) = panelWindow() ?: return
-        val density = context.resources.displayMetrics.density
-        resizeStartWidth = desiredWidthPx.takeIf { it > 0 }
-            ?: (if (lp.width > 0) lp.width else panelWindowWidth())
-        // 高度是 WRAP_CONTENT 时不知道实际值，取容器当前量出来的高度
-        resizeStartHeight = if (lp.height > 0) {
-            lp.height
-        } else {
-            container.height.takeIf { it > 0 } ?: (PANEL_DEFAULT_HEIGHT_DP * density).toInt()
-        }
-        // 直接用按下点做基准，拖动从第一帧就跟手
+        val location = IntArray(2).also { container.getLocationOnScreen(it) }
+        // 记下手指到窗口四条边的距离，拖动时让这条边一直贴着手指
+        resizeInsetLeft = screenX - location[0]
+        resizeInsetRight = (location[0] + lp.width) - screenX
+        resizeInsetBottom = (location[1] + container.height) - screenY
         resizeStartX = screenX
         resizeStartY = screenY
+        resizeFromLeft = mirrored
+        resizeStartHeight = if (lp.height > 0) lp.height else container.height
         resizeTracking = true
     }
 
-    private fun onResizeMove(screenX: Float, screenY: Float, vertical: Boolean, mirrored: Boolean) {
-        val (container, lp) = panelWindow() ?: return
+    /**
+     * 拖动角把手改变尺寸。
+     *
+     * 不用「按位移换算宽度」的做法：窗口的锚点行为决定了两条边是不是同时移动，
+     * 之前按 2 倍算，拖久了把手会跑离手指，再按原位置就按空了（表现为"弧线没了"）。
+     * 这里改成绝对目标 + 迭代校正：每帧读窗口真实的屏幕位置，把手指下面那条边贴过去，
+     * 不管锚点怎么表现都能收敛。
+     */
+    private fun onResizeMove(screenX: Float, screenY: Float, vertical: Boolean) {
         if (!resizeTracking) return
+        val (container, lp) = panelWindow() ?: return
+        val wm = context.getSystemService(WindowManager::class.java)
         val density = context.resources.displayMetrics.density
         val minWidth = (PANEL_MIN_WIDTH_DP * density).toInt()
         val maxWidth = safeScreenWidth()
+        val compactWidth = (PANEL_COMPACT_WIDTH_DP * density).toInt()
 
-        val dx = screenX - resizeStartX
-        // 窗口是居中锚点：手指往右拖 dx，宽度要涨 2dx 右边缘才跟得上
-        val signedDx = if (mirrored) -dx else dx
-        val nextWidth = (resizeStartWidth + signedDx * 2).toInt().coerceIn(minWidth, maxWidth)
+        val targetRight = screenX + resizeInsetRight
+        val targetLeft = screenX - resizeInsetLeft
 
-        // 缩到阈值以内就收成气泡：再窄下去图标和文字会挤在一起
-        if (nextWidth <= (PANEL_COMPACT_WIDTH_DP * density).toInt()) {
+        // 缩到阈值以内就收成气泡
+        repeat(RESIZE_ITERATIONS) {
+            val location = IntArray(2).also { container.getLocationOnScreen(it) }
+            val error = if (resizeFromLeft) {
+                (location[0] - targetLeft)
+            } else {
+                (targetRight - (location[0] + lp.width))
+            }
+            if (kotlin.math.abs(error) < 1f) return@repeat
+            // 左右把手方向相反：右把手加宽度，左把手减宽度
+            val delta = if (resizeFromLeft) -error else error
+            val next = (lp.width + delta).toInt().coerceIn(minWidth, maxWidth)
+            if (next == lp.width) return@repeat
+            lp.width = next
+            desiredWidthPx = next
+            runCatching { wm.updateViewLayout(container, lp) }
+        }
+
+        if (lp.width <= compactWidth) {
             // 收起成气泡：窗口宽度和"期望宽度"都恢复默认，否则下次展开还是窄的
             desiredWidthPx = 0
             lp.width = panelWindowWidth()
-            runCatching {
-                context.getSystemService(WindowManager::class.java).updateViewLayout(container, lp)
-            }
+            runCatching { wm.updateViewLayout(container, lp) }
             resizeTracking = false
             tracker.collapse()
             return
         }
 
-        var changed = false
-        if (nextWidth != lp.width) {
-            lp.width = nextWidth
-            desiredWidthPx = nextWidth
-            changed = true
-        }
-
-        // 高度只在「明显是竖着拖」时才改：
-        // 横拖时 dy≈0，一旦也去写高度就会把面板从 wrap_content 钉死，触发整块重新测量，
-        // 手势被打断后重新开始，宽度会被反复重算，表现就是抖动甚至突然缩成气泡。
+        // 高度只在「明显是竖着拖」时才改，横拖时写高度会触发整块重新测量
         val generating = uiState.value?.generating == true
         if (vertical && !generating) {
             val dy = screenY - resizeStartY
+            val dx = screenX - resizeStartX
             val verticalDominant = kotlin.math.abs(dy) > kotlin.math.abs(dx) &&
                 kotlin.math.abs(dy) > (PANEL_RESIZE_SLOP_DP * density)
             if (verticalDominant) {
                 val minHeight = (PANEL_MIN_HEIGHT_DP * density).toInt()
                 val maxHeight = safeScreenHeight() - (PANEL_TOP_OFFSET_DP * density).toInt()
-                val nextHeight = (resizeStartHeight + dy).toInt().coerceIn(minHeight, maxHeight)
-                if (nextHeight != lp.height) {
-                    lp.height = nextHeight
-                    panelHeightPx = nextHeight
+                val targetBottom = screenY + resizeInsetBottom
+                repeat(RESIZE_ITERATIONS) {
+                    val location = IntArray(2).also { container.getLocationOnScreen(it) }
+                    val actualBottom = location[1] + if (lp.height > 0) lp.height else container.height
+                    val error = (targetBottom - actualBottom).toInt()
+                    if (kotlin.math.abs(error) < 1) return@repeat
+                    val next = ((if (lp.height > 0) lp.height else container.height) + error)
+                        .coerceIn(minHeight, maxHeight)
+                    if (next == lp.height) return@repeat
+                    lp.height = next
+                    panelHeightPx = next
                     panelHeightPinned.value = true
-                    changed = true
+                    runCatching { wm.updateViewLayout(container, lp) }
                 }
             }
         }
-
-        if (!changed) return
-        runCatching {
-            context.getSystemService(WindowManager::class.java).updateViewLayout(container, lp)
-        }.onFailure { Log.w(TAG, "resize panel failed", it) }
     }
 
     private fun onResizeEnd() {
