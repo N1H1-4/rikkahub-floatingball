@@ -1804,10 +1804,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_desktop_pet_enable">显示桌面宠物</string>
   <string name="setting_desktop_pet_enable_desc">需要悬浮窗权限，否则无法停留在其他应用上方</string>
   <string name="setting_desktop_pet_group_appearance">形象</string>
-  <string name="setting_desktop_pet_choose_image">从相册选择</string>
-  <string name="setting_desktop_pet_builtin">内置形象</string>
-  <string name="setting_desktop_pet_custom">自定义图片</string>
-  <string name="setting_desktop_pet_reset">恢复内置形象</string>
+  <string name="setting_desktop_pet_avatar">形象</string>
+  <string name="setting_desktop_pet_avatar_desc">可以选相册图片、Emoji、图片链接，或重置成自动生成的图案</string>
   <string name="setting_desktop_pet_size">大小</string>
   <string name="setting_desktop_pet_opacity">不透明度</string>
   <string name="setting_desktop_pet_group_docking">停靠</string>

@@ -323,7 +323,7 @@ fun UIAvatar(
 }
 
 @Composable
-private fun ProceduralAvatar(name: String, modifier: Modifier = Modifier) {
+fun ProceduralAvatar(name: String, modifier: Modifier = Modifier) {
     val (fromColor, toColor) = remember(name) {
         vercelAvatarColors(name.ifBlank { "?" })
     }

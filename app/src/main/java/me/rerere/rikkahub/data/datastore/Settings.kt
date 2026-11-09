@@ -176,8 +176,8 @@ data class DisplaySetting(
     val volumeKeyScrollRatio: Float = 1.0f,
     val conversationSortOrder: ConversationSortOrder = ConversationSortOrder.UPDATE_TIME,
     val enableDesktopPet: Boolean = false,
-    // Desktop pet: empty path means the built-in mascot, otherwise a file:// path picked by the user
-    val desktopPetImagePath: String = "",
+    // 桌宠形象，和助手头像共用同一套选项（图片 / Emoji / URL / 重置）
+    val desktopPetAvatar: Avatar = Avatar.Dummy,
     val desktopPetSize: Float = 1f,
     val desktopPetOpacity: Float = 1f,
     val desktopPetDockToEdge: Boolean = true,

@@ -92,7 +92,7 @@ class DesktopPetWindow(
         dockToEdge = display.desktopPetDockToEdge
         autoHide = display.desktopPetAutoHide
         visuals.value = DesktopPetVisuals(
-            imagePath = display.desktopPetImagePath,
+            avatar = display.desktopPetAvatar,
             sizeScale = display.desktopPetSize,
             opacity = display.desktopPetOpacity,
         )

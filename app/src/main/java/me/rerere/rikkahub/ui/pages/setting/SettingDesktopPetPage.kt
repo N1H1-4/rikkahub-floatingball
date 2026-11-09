@@ -2,9 +2,6 @@ package me.rerere.rikkahub.ui.pages.setting
 
 import android.content.Intent
 import android.provider.Settings
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,7 +22,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,9 +44,9 @@ import me.rerere.hugeicons.stroke.Delete02
 import me.rerere.hugeicons.stroke.Robot01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DisplaySetting
-import me.rerere.rikkahub.data.pet.DesktopPetAvatar
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.components.ui.CardGroupValue
 import me.rerere.rikkahub.ui.components.ui.switchItem
 import me.rerere.rikkahub.ui.floating.DESKTOP_PET_MAX_SCALE
@@ -71,7 +67,6 @@ fun SettingDesktopPetPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     var displaySetting by remember(settings) { mutableStateOf(settings.displaySetting) }
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     var canDrawOverlays by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
@@ -85,20 +80,6 @@ fun SettingDesktopPetPage(vm: SettingVM = koinViewModel()) {
         displaySetting = setting
         vm.updateSettings { it.copy(displaySetting = setting) }
     }
-
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            val stored = withContext(Dispatchers.IO) {
-                DesktopPetAvatar.store(context, uri, context.contentResolver.getType(uri))
-            }
-            if (stored != null) {
-                update(displaySetting.copy(desktopPetImagePath = stored.toString()))
-            }
-        }
-    }
-
-    val imagePath = displaySetting.desktopPetImagePath
 
     Scaffold(
         topBar = {
@@ -158,57 +139,20 @@ fun SettingDesktopPetPage(vm: SettingVM = koinViewModel()) {
             item {
                 CardGroup(title = { Text(stringResource(R.string.setting_desktop_pet_group_appearance)) }) {
                     item(
-                        onClick = {
-                            imagePicker.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        headlineContent = { Text(stringResource(R.string.setting_desktop_pet_avatar)) },
+                        supportingContent = { Text(stringResource(R.string.setting_desktop_pet_avatar_desc)) },
+                        trailingContent = {
+                            // 和助手头像共用同一个选择器：相册裁剪 / Emoji / 图片 URL / 重置
+                            UIAvatar(
+                                name = "pet",
+                                value = displaySetting.desktopPetAvatar,
+                                onUpdate = { avatar ->
+                                    update(displaySetting.copy(desktopPetAvatar = avatar))
+                                },
+                                modifier = Modifier.size(64.dp),
                             )
                         },
-                        leadingContent = {
-                            if (imagePath.isNotBlank()) {
-                                AsyncImage(
-                                    model = imagePath,
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape),
-                                )
-                            } else {
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.secondaryContainer),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(HugeIcons.Robot01, contentDescription = null, modifier = Modifier.size(20.dp))
-                                }
-                            }
-                        },
-                        headlineContent = { Text(stringResource(R.string.setting_desktop_pet_choose_image)) },
-                        supportingContent = {
-                            Text(
-                                stringResource(
-                                    if (imagePath.isBlank()) {
-                                        R.string.setting_desktop_pet_builtin
-                                    } else {
-                                        R.string.setting_desktop_pet_custom
-                                    }
-                                )
-                            )
-                        },
-                        trailingContent = { Icon(HugeIcons.ArrowRight01, contentDescription = null) },
                     )
-                    if (imagePath.isNotBlank()) {
-                        item(
-                            onClick = {
-                                DesktopPetAvatar.clear(context)
-                                update(displaySetting.copy(desktopPetImagePath = ""))
-                            },
-                            leadingContent = { Icon(HugeIcons.Delete02, contentDescription = null) },
-                            headlineContent = { Text(stringResource(R.string.setting_desktop_pet_reset)) },
-                        )
-                    }
                     formItem(
                         headlineContent = { Text(stringResource(R.string.setting_desktop_pet_size)) },
                         trailingContent = { CardGroupValue("${(displaySetting.desktopPetSize * 100).roundToInt()}%") },

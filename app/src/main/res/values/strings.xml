@@ -1802,10 +1802,8 @@
   <string name="setting_desktop_pet_enable">Show desktop pet</string>
   <string name="setting_desktop_pet_enable_desc">Needs overlay permission, otherwise it cannot stay on top of other apps</string>
   <string name="setting_desktop_pet_group_appearance">Appearance</string>
-  <string name="setting_desktop_pet_choose_image">Choose from gallery</string>
-  <string name="setting_desktop_pet_builtin">Built-in mascot</string>
-  <string name="setting_desktop_pet_custom">Custom image</string>
-  <string name="setting_desktop_pet_reset">Restore built-in mascot</string>
+  <string name="setting_desktop_pet_avatar">Avatar</string>
+  <string name="setting_desktop_pet_avatar_desc">Pick a photo, an emoji, an image URL, or reset to the generated pattern</string>
   <string name="setting_desktop_pet_size">Size</string>
   <string name="setting_desktop_pet_opacity">Opacity</string>
   <string name="setting_desktop_pet_group_docking">Docking</string>
