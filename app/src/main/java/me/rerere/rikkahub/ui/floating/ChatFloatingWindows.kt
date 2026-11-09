@@ -267,11 +267,20 @@ class ChatFloatingWindows(
     private var resizeStartY = 0f
     private var resizeTracking = false
 
+    /**
+     * 找到面板窗口的根 View 和它的 WindowManager.LayoutParams。
+     *
+     * Compose 内容外面还套着一层 holder，它的 layoutParams 是普通 FrameLayout 的，
+     * 只看一层父节点会拿到 null，所以这里一路往上找"参数类型是 WindowManager.LayoutParams"的那一层。
+     */
     private fun panelWindow(): Pair<View, WindowManager.LayoutParams>? {
-        val control = panel ?: return null
-        val container = control.contentView?.parent as? View ?: return null
-        val lp = container.layoutParams as? WindowManager.LayoutParams ?: return null
-        return container to lp
+        var view: View? = panel?.contentView
+        while (view != null) {
+            val params = view.layoutParams
+            if (params is WindowManager.LayoutParams) return view to params
+            view = view.parent as? View
+        }
+        return null
     }
 
     private fun onResizeBegin(screenX: Float, screenY: Float) {
@@ -305,6 +314,8 @@ class ChatFloatingWindows(
 
         // 缩到阈值以内就收成气泡：再窄下去图标和文字会挤在一起
         if (nextWidth <= (PANEL_COMPACT_WIDTH_DP * density).toInt()) {
+            // 收起成气泡：窗口宽度和"期望宽度"都恢复默认，否则下次展开还是窄的
+            desiredWidthPx = 0
             lp.width = panelWindowWidth()
             runCatching {
                 context.getSystemService(WindowManager::class.java).updateViewLayout(container, lp)
