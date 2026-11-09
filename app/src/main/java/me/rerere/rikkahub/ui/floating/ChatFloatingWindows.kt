@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import android.view.View
 import android.view.WindowManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -62,6 +63,7 @@ private const val BUBBLE_TAG = "chat_floating_bubble"
 private const val PANEL_TAG = "chat_floating_panel"
 private const val PANEL_TOP_OFFSET_DP = 8f
 private const val PANEL_MAX_WIDTH_DP = 560f
+private const val PANEL_MIN_WIDTH_DP = 320f
 
 /**
  * 把 [ChatFloatingTracker] 的结果显示成系统悬浮窗：收起时是贴边的小图标，展开是固定在顶部的面板。
@@ -179,6 +181,7 @@ class ChatFloatingWindows(
                     onResumeQueue = { chatService.resumeInbox(conversationId) },
                     // 拖动时必须关掉动画：带动画的 moveBy 每帧都在追一个刚被顶掉的目标，看起来就像没动
                     onMoveWindow = { dx, dy -> panel?.moveBy(dx, dy, animate = false) },
+                    onResizeWidth = ::resizePanelWidth,
                 )
             }
         }
@@ -241,6 +244,29 @@ class ChatFloatingWindows(
             conversationIntent(context, conversationId.toString(), draftText, draftImage)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
+    }
+
+    /**
+     * 拖动左右下角的弧线改变面板宽度。
+     *
+     * FloatingX 没有公开的运行时改尺寸入口，但窗口根 View 的 layoutParams 就是它自己持有的
+     * 那一份对象，改完直接 updateViewLayout 就能和它的定位逻辑保持一致（窗口是 TOP_CENTER
+     * 锚点，宽度变化后系统会自己重新居中）。
+     */
+    private fun resizePanelWidth(deltaPx: Float) {
+        val control = panel ?: return
+        val container = control.contentView?.parent as? View ?: return
+        val lp = container.layoutParams as? WindowManager.LayoutParams ?: return
+        val current = if (lp.width > 0) lp.width else panelWindowWidth()
+        val density = context.resources.displayMetrics.density
+        val minWidth = (PANEL_MIN_WIDTH_DP * density).toInt()
+        val maxWidth = safeScreenWidth()
+        val next = (current + deltaPx.toInt()).coerceIn(minWidth, maxWidth)
+        if (next == current) return
+        lp.width = next
+        runCatching {
+            context.getSystemService(WindowManager::class.java).updateViewLayout(container, lp)
+        }.onFailure { Log.w(TAG, "resizePanelWidth failed", it) }
     }
 
     // 面板窗口宽度：内容最多 560dp，屏幕更窄时按屏幕宽度留 16dp 边距

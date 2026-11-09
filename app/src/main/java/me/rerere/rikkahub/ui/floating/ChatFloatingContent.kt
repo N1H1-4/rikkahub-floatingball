@@ -5,6 +5,7 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -59,7 +60,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -234,6 +239,8 @@ fun ChatFloatingPanel(
     onRemoveDraft: () -> Unit = {},
     /** 拖顶部的小横线时把窗口整体挪动 (dx, dy) */
     onMoveWindow: (Float, Float) -> Unit = { _, _ -> },
+    /** 拖左下/右下角的弧线时改窗口宽度，参数是这一下的水平位移 */
+    onResizeWidth: (Float) -> Unit = {},
 ) {
     // 输入框内容提到这一层：点全屏要把它带进聊天页，不能丢
     var replyText by rememberSaveable(state.conversationId) { mutableStateOf("") }
@@ -244,7 +251,7 @@ fun ChatFloatingPanel(
             modifier = Modifier
                 .widthIn(max = 560.dp)
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 18.dp),
             shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             shadowElevation = 8.dp,
@@ -306,6 +313,58 @@ fun ChatFloatingPanel(
                 )
             }
         }
+
+        // 左右下角的弧线：拖动改窗口宽度，和系统小窗的手感一致
+        ResizeArc(
+            modifier = Modifier.align(Alignment.BottomStart),
+            mirrored = true,
+            onDrag = onResizeWidth,
+        )
+        ResizeArc(
+            modifier = Modifier.align(Alignment.BottomEnd),
+            mirrored = false,
+            onDrag = onResizeWidth,
+        )
+    }
+}
+
+/**
+ * 角落里的缩放把手：一小段贴角的圆弧。
+ * [mirrored] 为 true 时是左下角，向右拖是缩小。
+ */
+@Composable
+private fun ResizeArc(
+    modifier: Modifier = Modifier,
+    mirrored: Boolean,
+    onDrag: (Float) -> Unit,
+) {
+    val color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+    Canvas(
+        modifier = modifier
+            .size(26.dp)
+            .pointerInput(mirrored) {
+                detectDragGestures { change, dragAmount ->
+                    change.consume()
+                    onDrag(if (mirrored) -dragAmount.x else dragAmount.x)
+                }
+            },
+    ) {
+        val stroke = 2.5.dp.toPx()
+        val radius = size.minDimension - stroke
+        val topLeft = if (mirrored) {
+            Offset(-radius, size.height - radius)
+        } else {
+            Offset(size.width - radius, size.height - radius)
+        }
+        drawArc(
+            color = color,
+            startAngle = if (mirrored) 270f else 180f,
+            sweepAngle = 90f,
+            useCenter = false,
+            topLeft = topLeft,
+            size = Size(radius * 2, radius * 2),
+            style = Stroke(width = stroke, cap = StrokeCap.Round),
+        )
     }
 }
 
