@@ -119,6 +119,29 @@ class ChatFloatingWindows(
         appScope.launch {
             tracker.window.map { it?.expanded }.distinctUntilChanged().collect(::render)
         }
+        // 回到"还没开始的空对话"阶段时，窗口恢复标准大小（那个阶段不允许缩放）
+        appScope.launch {
+            uiState.map { it?.panelPhase }.distinctUntilChanged().collect { phase ->
+                if (phase == PanelPhase.Idle) resetPanelSize()
+            }
+        }
+    }
+
+    /** 空对话阶段：宽度和高度都回到默认 */
+    private fun resetPanelSize() {
+        val (container, lp) = panelWindow() ?: return
+        val defaultWidth = panelWindowWidth()
+        val widthChanged = lp.width != defaultWidth
+        val heightChanged = lp.height != WindowManager.LayoutParams.WRAP_CONTENT
+        if (!widthChanged && !heightChanged) return
+        lp.width = defaultWidth
+        lp.height = WindowManager.LayoutParams.WRAP_CONTENT
+        desiredWidthPx = 0
+        panelHeightPx = 0
+        panelHeightPinned.value = false
+        runCatching {
+            context.getSystemService(WindowManager::class.java).updateViewLayout(container, lp)
+        }.onFailure { Log.w(TAG, "resetPanelSize failed", it) }
     }
 
     private fun chatState(id: Uuid): Flow<FloatingChatUiState> {
@@ -317,6 +340,8 @@ class ChatFloatingWindows(
      * 或者"只有第一次生效"这类问题。
      */
     private fun onResizeBegin(screenX: Float, screenY: Float, mirrored: Boolean) {
+        // 上一次如果 remove 失败，复用已分离的 View 会让预览框再也不显示，这里先清干净
+        hideResizePreview()
         val (container, lp) = panelWindow() ?: return
         val location = IntArray(2).also { container.getLocationOnScreen(it) }
         resizePanelX = location[0]
@@ -344,8 +369,7 @@ class ChatFloatingWindows(
             .coerceIn(minWidth, maxWidth)
 
         var height = resizeStartHeight
-        val generating = uiState.value?.generating == true
-        if (vertical && !generating &&
+        if (vertical &&
             kotlin.math.abs(dy) > kotlin.math.abs(dx) &&
             kotlin.math.abs(dy) > (PANEL_RESIZE_SLOP_DP * density)
         ) {

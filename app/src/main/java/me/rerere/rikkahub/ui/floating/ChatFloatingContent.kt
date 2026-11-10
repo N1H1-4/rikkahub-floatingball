@@ -73,6 +73,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -138,6 +141,15 @@ private val ArcInsetBottom = 24.dp
 private const val MORPH_INTERVAL_MILLIS = 650L
 private const val SPIN_DURATION_MILLIS = 4666
 
+/**
+ * 悬浮窗的四个阶段，决定能不能缩放、以及输入区怎么排布：
+ * - [Idle]      还没开始的空对话：固定大小，自动弹键盘方便 quick reply
+ * - [Sending]   刚发出、还没有内容回来：只允许调宽度
+ * - [Streaming] 正在输出内容：宽度和高度都能调，可以放到超过半个屏幕
+ * - [Finished]  这一轮结束：同样可调，并把模型/思考深度按钮挪到输入框那一行
+ */
+enum class PanelPhase { Idle, Sending, Streaming, Finished }
+
 /** 悬浮窗展示的会话状态 */
 data class FloatingChatUiState(
     val conversationId: Uuid,
@@ -159,6 +171,14 @@ data class FloatingChatUiState(
     val error: ChatError?,
 ) {
     val failed: Boolean get() = !generating && error != null
+
+    val panelPhase: PanelPhase
+        get() = when {
+            generating && !hasReply -> PanelPhase.Sending
+            generating -> PanelPhase.Streaming
+            hasReply -> PanelPhase.Finished
+            else -> PanelPhase.Idle
+        }
 }
 
 /** 收起时的小图标：应用 logo，生成中轮廓不停变形，结束后在角上标出结果 */
@@ -256,6 +276,14 @@ fun ChatFloatingPanel(
 ) {
     // 输入框内容提到这一层：点全屏要把它带进聊天页，不能丢
     var replyText by rememberSaveable(state.conversationId) { mutableStateOf("") }
+    var modelsOpen by remember { mutableStateOf(false) }
+    var reasoningOpen by remember { mutableStateOf(false) }
+
+    val phase = state.panelPhase
+
+    // 空对话固定大小；其余阶段能调宽度，输出中和输出完还能调高度
+    val canResizeWidth = phase != PanelPhase.Idle
+    val canResizeHeight = phase == PanelPhase.Streaming || phase == PanelPhase.Finished
 
     // 窗口和屏幕一样宽，大屏上限制宽度并居中
     Box(
@@ -314,40 +342,74 @@ fun ChatFloatingPanel(
                     draftImage = draftImage,
                     onRemoveDraft = onRemoveDraft,
                     onApplyQuickMessage = { replyText = it },
+                    // 输出结束后模型/思考深度按钮挪到下面输入框那一行，这一行就能收窄
+                    showModelControls = phase != PanelPhase.Finished,
+                    modelsOpen = modelsOpen,
+                    reasoningOpen = reasoningOpen,
+                    onToggleModels = {
+                        modelsOpen = !modelsOpen
+                        reasoningOpen = false
+                    },
+                    onToggleReasoning = {
+                        reasoningOpen = !reasoningOpen
+                        modelsOpen = false
+                    },
                 )
                 ReplyBar(
                     text = replyText,
                     onTextChange = { replyText = it },
                     generating = state.generating,
                     canSendEmpty = draftImage != null,
+                    requestFocus = phase == PanelPhase.Idle,
                     onSend = {
                         replyText = ""
                         onSend(it)
                     },
                     onStop = onStop,
+                    trailingControls = if (phase == PanelPhase.Finished) {
+                        {
+                            ModelReasoningButtons(
+                                conversationId = state.conversationId,
+                                modelsOpen = modelsOpen,
+                                reasoningOpen = reasoningOpen,
+                                onToggleModels = {
+                                    modelsOpen = !modelsOpen
+                                    reasoningOpen = false
+                                },
+                                onToggleReasoning = {
+                                    reasoningOpen = !reasoningOpen
+                                    modelsOpen = false
+                                },
+                            )
+                        }
+                    } else {
+                        null
+                    },
                 )
             }
         }
 
-        // 左右下角的弧线：拖动改窗口宽度，和系统小窗的手感一致
-        ResizeHandle(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = ArcInsetStart, bottom = ArcInsetBottom),
-            mirrored = true,
-            onBegin = { x, y -> onResizeBegin(x, y, true) },
-            onMove = { x, y -> onResizeMove(x, y, false) },
-            onEnd = onResizeEnd,
-        )
-        ResizeHandle(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = ArcInsetStart, bottom = ArcInsetBottom),
-            mirrored = false,
-            onBegin = { x, y -> onResizeBegin(x, y, false) },
-            onMove = { x, y -> onResizeMove(x, y, true) },
-            onEnd = onResizeEnd,
-        )
+        // 左右下角的弧线：空对话不可缩放；发出后可以调宽度；输出中和输出完还能调高度
+        if (canResizeWidth) {
+            ResizeHandle(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = ArcInsetStart, bottom = ArcInsetBottom),
+                mirrored = true,
+                onBegin = { x, y -> onResizeBegin(x, y, true) },
+                onMove = { x, y -> onResizeMove(x, y, false) },
+                onEnd = onResizeEnd,
+            )
+            ResizeHandle(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = ArcInsetStart, bottom = ArcInsetBottom),
+                mirrored = false,
+                onBegin = { x, y -> onResizeBegin(x, y, false) },
+                onMove = { x, y -> onResizeMove(x, y, canResizeHeight) },
+                onEnd = onResizeEnd,
+            )
+        }
     }
 }
 
@@ -603,8 +665,21 @@ private fun ReplyBar(
     onSend: (String) -> Unit,
     onStop: () -> Unit,
     canSendEmpty: Boolean = false,
+    /** 空对话阶段自动聚焦并弹键盘，方便直接 quick reply */
+    requestFocus: Boolean = false,
+    /** 插在输入框和发送键之间的东西（输出完成后放模型/思考深度按钮） */
+    trailingControls: (@Composable () -> Unit)? = null,
 ) {
     val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(requestFocus) {
+        if (requestFocus) {
+            focusRequester.requestFocus()
+            keyboard?.show()
+        }
+    }
 
     fun send() {
         val content = text.trim()
@@ -621,7 +696,9 @@ private fun ReplyBar(
         TextField(
             value = text,
             onValueChange = onTextChange,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .focusRequester(focusRequester),
             // 生成中发送的消息会排队，等这一轮结束后再发
             placeholder = {
                 Text(
@@ -645,6 +722,7 @@ private fun ReplyBar(
                 Icon(HugeIcons.Stop, contentDescription = stringResource(R.string.stop))
             }
         }
+        trailingControls?.invoke()
         FilledIconButton(onClick = ::send, enabled = text.isNotBlank() || canSendEmpty) {
             Icon(HugeIcons.ArrowUp02, contentDescription = stringResource(R.string.send))
         }
@@ -663,6 +741,12 @@ private fun ComposerToolbar(
     draftImage: String?,
     onRemoveDraft: () -> Unit,
     onApplyQuickMessage: (String) -> Unit,
+    /** false 时把模型/思考深度按钮让给下面输入框那一行（输出完成阶段） */
+    showModelControls: Boolean,
+    modelsOpen: Boolean,
+    reasoningOpen: Boolean,
+    onToggleModels: () -> Unit,
+    onToggleReasoning: () -> Unit,
 ) {
     val chatService = koinInject<ChatService>()
     val settingsStore = koinInject<SettingsStore>()
@@ -672,9 +756,6 @@ private fun ComposerToolbar(
     val model = settings.getChatModelOf(conversation)
     val quickMessages = settings.getQuickMessagesOfAssistant(assistant)
     val scope = rememberCoroutineScope()
-
-    var showModels by remember { mutableStateOf(false) }
-    var showReasoning by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -697,14 +778,13 @@ private fun ComposerToolbar(
                     )
                 }
             }
+            // 模型/思考深度：输出完成阶段挪到下面输入行，这里就不画了
+            if (showModelControls) {
             // 模型：显示当前模型的图标；没选模型时用大脑图标
             ComposerIconButton(
                 label = stringResource(R.string.floating_chat_model),
-                selected = showModels,
-                onClick = {
-                    showModels = !showModels
-                    showReasoning = false
-                },
+                selected = modelsOpen,
+                onClick = onToggleModels,
             ) {
                 if (model != null) {
                     AutoAIIcon(
@@ -719,17 +799,15 @@ private fun ComposerToolbar(
             // 思考深度：图标跟着档位一起变
             ComposerIconButton(
                 label = stringResource(R.string.floating_chat_reasoning),
-                selected = showReasoning,
-                onClick = {
-                    showReasoning = !showReasoning
-                    showModels = false
-                },
+                selected = reasoningOpen,
+                onClick = onToggleReasoning,
             ) {
                 Icon(assistant.reasoningLevel.icon(), contentDescription = null, modifier = Modifier.size(20.dp))
             }
+            }
         }
 
-        if (showModels) {
+        if (modelsOpen) {
             val models = remember(settings.providers) {
                 settings.providers.flatMap { it.models }.filter { it.type == ModelType.CHAT }
             }
@@ -739,7 +817,7 @@ private fun ComposerToolbar(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                showModels = false
+                                onToggleModels()
                                 scope.launch {
                                     chatService.updateChatAssistant(conversationId) {
                                         it.copy(chatModelId = item.id)
@@ -770,7 +848,7 @@ private fun ComposerToolbar(
             }
         }
 
-        if (showReasoning) {
+        if (reasoningOpen) {
             val levels = ReasoningLevel.entries
             var sliderValue by remember(assistant.reasoningLevel) {
                 mutableFloatStateOf(
@@ -829,6 +907,42 @@ private fun ComposerChip(label: String, selected: Boolean, onClick: () -> Unit) 
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
         )
+    }
+}
+
+/** 输出完成阶段放在输入框和发送键之间的两个按钮，逻辑和工具栏里那套一致 */
+@Composable
+private fun ModelReasoningButtons(
+    conversationId: Uuid,
+    modelsOpen: Boolean,
+    reasoningOpen: Boolean,
+    onToggleModels: () -> Unit,
+    onToggleReasoning: () -> Unit,
+) {
+    val chatService = koinInject<ChatService>()
+    val settingsStore = koinInject<SettingsStore>()
+    val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
+    val conversation by chatService.getConversationFlow(conversationId).collectAsStateWithLifecycle()
+    val assistant = settings.getAssistantOf(conversation)
+    val model = settings.getChatModelOf(conversation)
+
+    ComposerIconButton(
+        label = stringResource(R.string.floating_chat_model),
+        selected = modelsOpen,
+        onClick = onToggleModels,
+    ) {
+        if (model != null) {
+            AutoAIIcon(name = model.modelId, modifier = Modifier.size(24.dp), color = Color.Transparent)
+        } else {
+            Icon(HugeIcons.Brain02, contentDescription = null, modifier = Modifier.size(20.dp))
+        }
+    }
+    ComposerIconButton(
+        label = stringResource(R.string.floating_chat_reasoning),
+        selected = reasoningOpen,
+        onClick = onToggleReasoning,
+    ) {
+        Icon(assistant.reasoningLevel.icon(), contentDescription = null, modifier = Modifier.size(20.dp))
     }
 }
 
