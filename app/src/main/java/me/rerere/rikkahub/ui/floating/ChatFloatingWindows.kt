@@ -416,9 +416,20 @@ class ChatFloatingWindows(
             panelHeightPx = resizeTargetHeight
             panelHeightPinned.value = true
         }
-        runCatching {
-            context.getSystemService(WindowManager::class.java).updateViewLayout(container, lp)
-        }.onFailure { Log.w(TAG, "apply panel size failed", it) }
+        val wm = context.getSystemService(WindowManager::class.java)
+        runCatching { wm.updateViewLayout(container, lp) }
+            .onFailure { Log.w(TAG, "apply panel size failed", it) }
+
+        // 校验一次：某些情况下（窗口刚被重建、或浮窗库自己又摆了一次位置）尺寸会被改回去，
+        // 这里补写一次，避免"调到极限之后就再也调不动"。
+        container.post {
+            val current = container.layoutParams as? WindowManager.LayoutParams ?: return@post
+            if (current.width == resizeTargetWidth) return@post
+            current.width = resizeTargetWidth
+            if (heightChanged) current.height = resizeTargetHeight
+            runCatching { wm.updateViewLayout(container, current) }
+                .onFailure { Log.w(TAG, "re-apply panel size failed", it) }
+        }
     }
 
     // ---- 拖动时的预览框 ----

@@ -135,8 +135,8 @@ import kotlin.uuid.Uuid
 // 和 Material3 LoadingIndicator 的参数一致；放宽 visibilityThreshold 让低阻尼弹簧在间隔内结束
 private val MorphSpring = spring<Float>(dampingRatio = 0.6f, stiffness = 200f, visibilityThreshold = 0.1f)
 // 弧线把手相对窗口右下角的内缩：卡片内边距 12/26dp + 圆角 28dp，盒子 30dp
-private val ArcInsetStart = 10.dp
-private val ArcInsetBottom = 24.dp
+private val ArcInsetStart = 2.dp
+private val ArcInsetBottom = 14.dp
 
 private const val MORPH_INTERVAL_MILLIS = 650L
 private const val SPIN_DURATION_MILLIS = 4666
@@ -434,7 +434,8 @@ private fun ResizeHandle(
 
     Canvas(
         modifier = modifier
-            .size(30.dp)
+            // 命中区比弧线大不少：窗口缩放后角落位置会变，命中区太小很容易按空
+            .size(44.dp)
             .pointerInteropFilter { event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
@@ -460,16 +461,18 @@ private fun ResizeHandle(
     ) {
         if (alpha <= 0.01f) return@Canvas
         val stroke = 2.5.dp.toPx()
+        // 弧线半径固定，不跟着命中区一起放大
+        val radius = 30.dp.toPx()
         // 圆心落在盒子的一个角上：左下角把手用右上角当圆心，右下角把手用左上角
-        val centerX = if (mirrored) size.width else 0f
-        val centerY = 0f
+        val centerX = if (mirrored) 0f else size.width
+        val centerY = size.height
         drawArc(
             color = color.copy(alpha = alpha * 0.75f),
-            startAngle = if (mirrored) 90f else 0f,
+            startAngle = if (mirrored) 270f else 180f,
             sweepAngle = 90f,
             useCenter = false,
-            topLeft = Offset(centerX - size.width, centerY - size.height),
-            size = Size(size.width * 2, size.height * 2),
+            topLeft = Offset(centerX - radius, centerY - radius),
+            size = Size(radius * 2, radius * 2),
             style = Stroke(width = stroke, cap = StrokeCap.Round),
         )
     }
