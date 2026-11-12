@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -299,8 +300,10 @@ fun ChatFloatingPanel(
     ) {
         Surface(
             modifier = Modifier
-                .widthIn(max = 560.dp)
+                // 卡片必须跟着窗口走：之前这里限了 560dp，窗口却能继续变大，
+                // 结果卡片停在原地、把手跑到卡片外面，看起来就是"拖到这么大就失灵"
                 .fillMaxWidth()
+                .then(if (heightPinned) Modifier.fillMaxHeight() else Modifier)
                 .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 26.dp),
             shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
