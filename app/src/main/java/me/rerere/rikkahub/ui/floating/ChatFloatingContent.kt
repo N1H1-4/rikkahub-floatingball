@@ -65,6 +65,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
@@ -292,6 +296,8 @@ fun ChatFloatingPanel(
     val canResizeHeight = phase == PanelPhase.Streaming || phase == PanelPhase.Finished
     var leftArcPressed by remember { mutableStateOf(false) }
     var rightArcPressed by remember { mutableStateOf(false) }
+    // 卡片在屏幕上的真实位置，弧线按它画，不再用常量推（生成中/钉住高度时布局会变）
+    var cardRect by remember { mutableStateOf(Rect.Zero) }
 
     // 窗口和屏幕一样宽，大屏上限制宽度并居中
     Box(
@@ -304,7 +310,8 @@ fun ChatFloatingPanel(
                 // 结果卡片停在原地、把手跑到卡片外面，看起来就是"拖到这么大就失灵"
                 .fillMaxWidth()
                 .then(if (heightPinned) Modifier.fillMaxHeight() else Modifier)
-                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 26.dp),
+                .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 26.dp)
+                .onGloballyPositioned { cardRect = it.boundsInRoot() },
             shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             shadowElevation = 8.dp,
@@ -402,7 +409,7 @@ fun ChatFloatingPanel(
         // 左右下角的弧线：空对话不可缩放；发出后可以调宽度；输出中和输出完还能调高度
         if (canResizeWidth) {
             // 弧线按卡片圆角的真实几何统一绘制，触摸区单独放（比弧线大，方便按中）
-            ResizeArcs(leftPressed = leftArcPressed, rightPressed = rightArcPressed)
+            ResizeArcs(leftPressed = leftArcPressed, rightPressed = rightArcPressed, cardRect = cardRect)
             ResizeHandle(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
@@ -466,22 +473,37 @@ private fun ResizeHandle(
 }
 
 /**
- * 两段贴角弧线。圆心取卡片圆角的圆心、半径比圆角略大，
- * 所以弧线和圆角是同心同向的，不会看起来"反了"。
+ * 两段贴角弧线。
+ *
+ * 位置直接取卡片测量出来的真实矩形（root 坐标）和主题里的真实圆角半径，
+ * 不再按 padding 常量推算 —— 生成中滚动、手动钉住高度时布局会变，推算就会飘。
  */
 @Composable
-private fun ResizeArcs(leftPressed: Boolean, rightPressed: Boolean) {
+private fun ResizeArcs(leftPressed: Boolean, rightPressed: Boolean, cardRect: Rect) {
     val color = MaterialTheme.colorScheme.onSurfaceVariant
+    val shape = MaterialTheme.shapes.extraLarge
     val leftAlpha by animateFloatAsState(if (leftPressed) 1f else 0f, label = "arc-left")
     val rightAlpha by animateFloatAsState(if (rightPressed) 1f else 0f, label = "arc-right")
     if (leftAlpha <= 0.01f && rightAlpha <= 0.01f) return
+    if (cardRect == Rect.Zero) return
 
-    Canvas(modifier = Modifier.fillMaxSize()) {
+    var canvasOrigin by remember { mutableStateOf(Offset.Zero) }
+    Canvas(
+        modifier = Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { canvasOrigin = it.positionInRoot() },
+    ) {
         val stroke = 2.5.dp.toPx()
-        val radius = (CardCorner + 3.dp).toPx()
-        val centerY = size.height - (CardInsetBottom + CardCorner).toPx()
+        val cornerPx = shape.topStart.toPx(Size(cardRect.width, cardRect.height), this)
+        val radius = cornerPx + 3.dp.toPx()
+        // 卡片矩形换算到画布坐标
+        val cardLeft = cardRect.left - canvasOrigin.x
+        val cardRight = cardRect.right - canvasOrigin.x
+        val cardBottom = cardRect.bottom - canvasOrigin.y
+
         if (leftAlpha > 0.01f) {
-            val centerX = (CardInsetStart + CardCorner).toPx()
+            val centerX = cardLeft + cornerPx
+            val centerY = cardBottom - cornerPx
             drawArc(
                 color = color.copy(alpha = leftAlpha * 0.75f),
                 startAngle = 90f,
@@ -493,7 +515,8 @@ private fun ResizeArcs(leftPressed: Boolean, rightPressed: Boolean) {
             )
         }
         if (rightAlpha > 0.01f) {
-            val centerX = size.width - (CardInsetStart + CardCorner).toPx()
+            val centerX = cardRight - cornerPx
+            val centerY = cardBottom - cornerPx
             drawArc(
                 color = color.copy(alpha = rightAlpha * 0.75f),
                 startAngle = 0f,
