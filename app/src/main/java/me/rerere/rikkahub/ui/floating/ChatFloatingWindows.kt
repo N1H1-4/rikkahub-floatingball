@@ -368,11 +368,10 @@ class ChatFloatingWindows(
         val width = (resizeStartWidth + if (resizeFromLeft) -dx else dx)
             .coerceIn(minWidth, maxWidth)
 
+        // 右下角是"角缩放"：宽高一起跟着手指走，和系统小窗一致。
+        // 以前要求竖直位移必须大于水平位移，稍微斜着拖就只改宽度，用起来像是"不能纵向放大"。
         var height = resizeStartHeight
-        if (vertical &&
-            kotlin.math.abs(dy) > kotlin.math.abs(dx) &&
-            kotlin.math.abs(dy) > (PANEL_RESIZE_SLOP_DP * density)
-        ) {
+        if (vertical) {
             val minHeight = (PANEL_MIN_HEIGHT_DP * density).toInt()
             val maxHeight = safeScreenHeight() - (PANEL_TOP_OFFSET_DP * density).toInt()
             height = (resizeStartHeight + dy).coerceIn(minHeight, maxHeight)
