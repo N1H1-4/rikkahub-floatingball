@@ -135,6 +135,11 @@ import kotlin.uuid.Uuid
 // 和 Material3 LoadingIndicator 的参数一致；放宽 visibilityThreshold 让低阻尼弹簧在间隔内结束
 private val MorphSpring = spring<Float>(dampingRatio = 0.6f, stiffness = 200f, visibilityThreshold = 0.1f)
 // 弧线把手相对窗口右下角的内缩：卡片内边距 12/26dp + 圆角 28dp，盒子 30dp
+// 卡片的实际内边距与圆角，弧线要按这个真实几何画
+private val CardInsetStart = 12.dp
+private val CardInsetBottom = 26.dp
+private val CardCorner = 28.dp
+
 private val ArcInsetStart = 2.dp
 private val ArcInsetBottom = 14.dp
 
@@ -284,6 +289,8 @@ fun ChatFloatingPanel(
     // 空对话固定大小；其余阶段能调宽度，输出中和输出完还能调高度
     val canResizeWidth = phase != PanelPhase.Idle
     val canResizeHeight = phase == PanelPhase.Streaming || phase == PanelPhase.Finished
+    var leftArcPressed by remember { mutableStateOf(false) }
+    var rightArcPressed by remember { mutableStateOf(false) }
 
     // 窗口和屏幕一样宽，大屏上限制宽度并居中
     Box(
@@ -391,55 +398,49 @@ fun ChatFloatingPanel(
 
         // 左右下角的弧线：空对话不可缩放；发出后可以调宽度；输出中和输出完还能调高度
         if (canResizeWidth) {
+            // 弧线按卡片圆角的真实几何统一绘制，触摸区单独放（比弧线大，方便按中）
+            ResizeArcs(leftPressed = leftArcPressed, rightPressed = rightArcPressed)
             ResizeHandle(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .padding(start = ArcInsetStart, bottom = ArcInsetBottom),
-                mirrored = true,
                 onBegin = { x, y -> onResizeBegin(x, y, true) },
                 onMove = { x, y -> onResizeMove(x, y, false) },
                 onEnd = onResizeEnd,
+                onPressedChange = { leftArcPressed = it },
             )
             ResizeHandle(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(end = ArcInsetStart, bottom = ArcInsetBottom),
-                mirrored = false,
                 onBegin = { x, y -> onResizeBegin(x, y, false) },
                 onMove = { x, y -> onResizeMove(x, y, canResizeHeight) },
                 onEnd = onResizeEnd,
+                onPressedChange = { rightArcPressed = it },
             )
         }
     }
 }
 
 /**
- * 角落里的缩放把手：一段和面板圆角**同心**的弧线，只在手指按住时显示。
- *
- * 弧的圆心就是卡片圆角的圆心，所以它贴着圆角走，不会看起来"反方向"。
- * 拖动直接用 MotionEvent 的屏幕坐标（rawX/rawY）：窗口会随着拖动改变尺寸，自己也在动，
- * 用相对增量会形成反馈回环，表现就是「不跟手、抖」。
+ * 角落里的缩放把手：只负责接触摸（可以比弧线大很多，方便按中），
+ * 弧线由 [ResizeArcs] 按卡片圆角的真实几何统一绘制。
  */
 @Composable
 private fun ResizeHandle(
     modifier: Modifier = Modifier,
-    mirrored: Boolean,
     onBegin: (Float, Float) -> Unit,
     onMove: (Float, Float) -> Unit,
     onEnd: () -> Unit,
+    onPressedChange: (Boolean) -> Unit,
 ) {
-    var pressed by remember { mutableStateOf(false) }
-    val alpha by animateFloatAsState(if (pressed) 1f else 0f, label = "resize-arc")
-    val color = MaterialTheme.colorScheme.onSurfaceVariant
-
-    Canvas(
+    Box(
         modifier = modifier
-            // 命中区比弧线大不少：窗口缩放后角落位置会变，命中区太小很容易按空
             .size(44.dp)
             .pointerInteropFilter { event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
-                        pressed = true
+                        onPressedChange(true)
                         onBegin(event.rawX, event.rawY)
                         true
                     }
@@ -450,7 +451,7 @@ private fun ResizeHandle(
                     }
 
                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        pressed = false
+                        onPressedChange(false)
                         onEnd()
                         true
                     }
@@ -458,23 +459,48 @@ private fun ResizeHandle(
                     else -> false
                 }
             },
-    ) {
-        if (alpha <= 0.01f) return@Canvas
+    )
+}
+
+/**
+ * 两段贴角弧线。圆心取卡片圆角的圆心、半径比圆角略大，
+ * 所以弧线和圆角是同心同向的，不会看起来"反了"。
+ */
+@Composable
+private fun ResizeArcs(leftPressed: Boolean, rightPressed: Boolean) {
+    val color = MaterialTheme.colorScheme.onSurfaceVariant
+    val leftAlpha by animateFloatAsState(if (leftPressed) 1f else 0f, label = "arc-left")
+    val rightAlpha by animateFloatAsState(if (rightPressed) 1f else 0f, label = "arc-right")
+    if (leftAlpha <= 0.01f && rightAlpha <= 0.01f) return
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
         val stroke = 2.5.dp.toPx()
-        // 弧线半径固定，不跟着命中区一起放大
-        val radius = 30.dp.toPx()
-        // 圆心落在盒子的一个角上：左下角把手用右上角当圆心，右下角把手用左上角
-        val centerX = if (mirrored) 0f else size.width
-        val centerY = size.height
-        drawArc(
-            color = color.copy(alpha = alpha * 0.75f),
-            startAngle = if (mirrored) 270f else 180f,
-            sweepAngle = 90f,
-            useCenter = false,
-            topLeft = Offset(centerX - radius, centerY - radius),
-            size = Size(radius * 2, radius * 2),
-            style = Stroke(width = stroke, cap = StrokeCap.Round),
-        )
+        val radius = (CardCorner + 3.dp).toPx()
+        val centerY = size.height - (CardInsetBottom + CardCorner).toPx()
+        if (leftAlpha > 0.01f) {
+            val centerX = (CardInsetStart + CardCorner).toPx()
+            drawArc(
+                color = color.copy(alpha = leftAlpha * 0.75f),
+                startAngle = 90f,
+                sweepAngle = 90f,
+                useCenter = false,
+                topLeft = Offset(centerX - radius, centerY - radius),
+                size = Size(radius * 2, radius * 2),
+                style = Stroke(width = stroke, cap = StrokeCap.Round),
+            )
+        }
+        if (rightAlpha > 0.01f) {
+            val centerX = size.width - (CardInsetStart + CardCorner).toPx()
+            drawArc(
+                color = color.copy(alpha = rightAlpha * 0.75f),
+                startAngle = 0f,
+                sweepAngle = 90f,
+                useCenter = false,
+                topLeft = Offset(centerX - radius, centerY - radius),
+                size = Size(radius * 2, radius * 2),
+                style = Stroke(width = stroke, cap = StrokeCap.Round),
+            )
+        }
     }
 }
 
