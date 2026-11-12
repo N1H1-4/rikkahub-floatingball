@@ -16,7 +16,6 @@ import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.MediaCreationService
 import me.rerere.rikkahub.service.ScreenCaptureManager
 import me.rerere.rikkahub.ui.floating.ChatFloatingWindows
-import me.rerere.rikkahub.ui.floating.DesktopPetWindow
 import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceTerminalSessionManager
 import me.rerere.rikkahub.utils.EmojiData
 import me.rerere.rikkahub.utils.EmojiUtils
@@ -99,6 +98,7 @@ val appModule = module {
             context = get(),
             appScope = get(),
             tracker = get(),
+            settingsStore = get(),
             lazyChatService = lazy { get() },
         )
     }
@@ -106,15 +106,6 @@ val appModule = module {
     // 截屏：持有 MediaProjection 的那份状态，服务与界面共用
     single {
         ScreenCaptureManager(get())
-    }
-
-    // 桌宠常驻窗口，进程启动即订阅开关
-    single(createdAtStart = true) {
-        DesktopPetWindow(
-            context = get(),
-            appScope = get(),
-            settingsStore = get(),
-        )
     }
 
     single {

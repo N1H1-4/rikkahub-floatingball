@@ -42,7 +42,7 @@ import me.rerere.rikkahub.service.CaptureState
 import me.rerere.rikkahub.service.ChatFloatingTracker
 import me.rerere.rikkahub.service.ScreenCaptureManager
 import me.rerere.rikkahub.service.ScreenCaptureService
-import me.rerere.rikkahub.ui.floating.DesktopPetWindow
+import me.rerere.rikkahub.ui.floating.ChatFloatingWindows
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import me.rerere.ui.sketch.ScreenshotEditor
 import org.koin.android.ext.android.inject
@@ -57,7 +57,7 @@ import kotlin.uuid.Uuid
  */
 class ScreenCaptureActivity : ComponentActivity() {
     private val captureManager: ScreenCaptureManager by inject()
-    private val desktopPet: DesktopPetWindow by inject()
+    private val floatingWindows: ChatFloatingWindows by inject()
     private val filesManager: FilesManager by inject()
     private val floatingTracker: ChatFloatingTracker by inject()
 
@@ -84,7 +84,7 @@ class ScreenCaptureActivity : ComponentActivity() {
         // 铺到系统栏下面，冻结的画面才和用户刚才看到的屏幕严丝合缝
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
-        desktopPet.onCaptureStarted()
+        floatingWindows.onCaptureStarted()
         if (savedInstanceState == null) {
             launchCapture()
         }
@@ -141,7 +141,7 @@ class ScreenCaptureActivity : ComponentActivity() {
     override fun onDestroy() {
         captureManager.release()
         ScreenCaptureService.stop(this)
-        desktopPet.onCaptureFinished()
+        floatingWindows.onCaptureFinished()
         super.onDestroy()
     }
 

@@ -31,7 +31,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.petterp.floatingx.compose.compose
 import com.petterp.floatingx.core.FloatingX
+import me.rerere.rikkahub.data.datastore.DisplaySetting
+import me.rerere.rikkahub.data.datastore.SettingsStore
+import com.petterp.floatingx.core.layout.FxHalfHide
 import com.petterp.floatingx.core.FxControl
+import com.petterp.floatingx.core.update
 import com.petterp.floatingx.core.animation.FxAnimations
 import com.petterp.floatingx.core.gesture.FxDrag
 import com.petterp.floatingx.core.gesture.FxGesture
@@ -90,11 +94,22 @@ class ChatFloatingWindows(
     private val context: Application,
     private val appScope: AppScope,
     private val tracker: ChatFloatingTracker,
+    private val settingsStore: SettingsStore,
     lazyChatService: Lazy<ChatService>,
 ) {
     private val chatService by lazyChatService
     private var bubble: FxControl? = null
     private var panel: FxControl? = null
+
+    // 合并后的球：形象跟着显示设置走，窗口小且常驻
+    private val ballVisuals = mutableStateOf(DesktopPetVisuals())
+    private val ballMenuOpen = mutableStateOf(false)
+    private var captureInProgress = false
+
+    private val displaySetting: StateFlow<DisplaySetting> = settingsStore.settingsFlow
+        .map { it.displaySetting }
+        .distinctUntilChanged()
+        .stateIn(appScope, SharingStarted.Eagerly, DisplaySetting())
 
     // 悬浮窗显示期间一直汇总，气泡和面板切换时直接拿到当前状态，不会先空一帧
     private val uiState: StateFlow<FloatingChatUiState?> = tracker.window
@@ -118,6 +133,27 @@ class ChatFloatingWindows(
     init {
         appScope.launch {
             tracker.window.map { it?.expanded }.distinctUntilChanged().collect(::render)
+        }
+        appScope.launch {
+            displaySetting.collect { display ->
+                ballVisuals.value = DesktopPetVisuals(
+                    avatar = display.desktopPetAvatar,
+                    sizeScale = display.desktopPetSize,
+                    opacity = display.desktopPetOpacity,
+                )
+                runCatching {
+                    bubble?.update {
+                        adsorb(
+                            when {
+                                !display.desktopPetDockToEdge -> FxAdsorb.none()
+                                display.desktopPetAutoHide -> FxAdsorb.horizontal(FxHalfHide(0.55f))
+                                else -> FxAdsorb.horizontal()
+                            }
+                        )
+                    }
+                }.onFailure { Log.w(TAG, "update ball adsorb failed", it) }
+                render(tracker.window.value?.expanded)
+            }
         }
         // 回到"还没开始的空对话"阶段时，窗口恢复标准大小（那个阶段不允许缩放）
         appScope.launch {
@@ -165,27 +201,68 @@ class ChatFloatingWindows(
         // 面板要收起/关闭时，别把拖动预览框留在屏幕上
         if (expanded != true) hideResizePreview()
         // 后台弹不出权限申请页，没有权限就不显示
-        if (expanded == null || !FxPermission.isGranted(context)) {
+        if (!FxPermission.isGranted(context)) {
             bubble?.cancel()
             panel?.cancel()
             bubble = null
             panel = null
             return
         }
-        val bubble = bubble ?: installBubble().also { bubble = it }
-        if (expanded) {
-            bubble.hide()
-            (panel ?: installPanel().also { panel = it }).show()
+        // 合并后的球：开着"桌面宠物"开关就常驻；没有开关时只在有会话可跟时出现
+        val ballVisible = !captureInProgress &&
+            (displaySetting.value.enableDesktopPet || expanded != null)
+        val ball = bubble ?: installBubble().also { bubble = it }
+
+        if (expanded == true) {
+            ball.hide()
+            showPanelNearBall()
             applyPanelSizeIfNeeded()
         } else {
             panel?.hide()
-            bubble.show()
+            if (ballVisible) ball.show() else ball.hide()
         }
+    }
+
+    /** 截屏前把球藏起来，否则会被一起截进画面；截完再放回来 */
+    fun onCaptureStarted() {
+        captureInProgress = true
+        ballMenuOpen.value = false
+        bubble?.hide()
+    }
+
+    fun onCaptureFinished() {
+        captureInProgress = false
+        render(tracker.window.value?.expanded)
+    }
+
+    /** 展开面板时按球所在的一侧摆放，而不是永远固定在屏幕正上方 */
+    private fun showPanelNearBall() {
+        val control = panel ?: installPanel().also { panel = it }
+        val onRight = bubble?.position?.let { it.x > safeScreenWidth() / 2f } ?: true
+        runCatching {
+            control.update {
+                anchor(if (onRight) FxGravity.TOP_END else FxGravity.TOP_START, dy = dp(PANEL_TOP_OFFSET_DP))
+                margin(left = dp(8f), right = dp(8f))
+            }
+        }.onFailure { Log.w(TAG, "anchor panel failed", it) }
+        control.show()
     }
 
     private fun installBubble(): FxControl = FloatingX.install(BUBBLE_TAG) {
         compose {
-            WindowContent { state -> ChatFloatingBubble(state = state, onClick = tracker::expand) }
+            WindowContent { state ->
+                FloatingBall(
+                    visuals = ballVisuals.value,
+                    state = state,
+                    menuOpen = ballMenuOpen.value,
+                    onTap = ::onBallTap,
+                    onLongPress = { ballMenuOpen.value = true },
+                    onCloseMenu = { ballMenuOpen.value = false },
+                    onCapture = ::launchCapture,
+                    onOpenChat = if (tracker.window.value != null) tracker::expand else null,
+                    onOpenApp = ::openApp,
+                )
+            }
         }
         anchor(FxGravity.CENTER_END, dy = -dp(96f))
         margin(left = dp(8f), right = dp(8f))
@@ -193,6 +270,38 @@ class ChatFloatingWindows(
         persist(FxSpStorage(context))
         animation(FxAnimations.scale())
         systemHost(context) { permission(FxPermissionStrategy.skip()) }
+    }
+
+    /** 单击：有正在跟的会话就展开面板，否则直接进选区截屏 */
+    private fun onBallTap() {
+        ballMenuOpen.value = false
+        if (tracker.window.value != null) {
+            tracker.expand()
+        } else {
+            launchCapture()
+        }
+    }
+
+    private fun launchCapture() {
+        onCaptureStarted()
+        runCatching {
+            context.startActivity(
+                Intent(context, me.rerere.rikkahub.ui.screenshot.ScreenCaptureActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }.onFailure {
+            Log.e(TAG, "launch capture failed", it)
+            onCaptureFinished()
+        }
+    }
+
+    private fun openApp() {
+        runCatching {
+            context.startActivity(
+                Intent(context, me.rerere.rikkahub.RouteActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }.onFailure { Log.w(TAG, "open app failed", it) }
     }
 
     private fun installPanel(): FxControl = FloatingX.install(PANEL_TAG) {

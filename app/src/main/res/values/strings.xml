@@ -1797,9 +1797,9 @@
   <string name="setting_page_preferences_notification_floating_window_desc">When you leave the app while the AI is still replying, show a floating icon. Tap it to check progress, confirm tool calls and reply quickly</string>
   <string name="setting_page_preferences_notification_overlay_permission">Grant overlay permission</string>
   <string name="setting_page_preferences_notification_overlay_permission_desc">The floating window will not appear without this permission</string>
-  <string name="setting_page_preferences_desktop_pet">Desktop pet</string>
-  <string name="setting_page_preferences_desktop_pet_desc">Keep a character on top of the screen. Tap it to capture the screen and ask about it</string>
-  <string name="setting_desktop_pet_enable">Show desktop pet</string>
+  <string name="setting_page_preferences_desktop_pet">Floating ball</string>
+  <string name="setting_page_preferences_desktop_pet_desc">An always-on ball: tap to open the chat or capture the screen, long-press for a quick menu</string>
+  <string name="setting_desktop_pet_enable">Show floating ball</string>
   <string name="setting_desktop_pet_enable_desc">Needs overlay permission, otherwise it cannot stay on top of other apps</string>
   <string name="setting_desktop_pet_group_appearance">Appearance</string>
   <string name="setting_desktop_pet_avatar">Avatar</string>

@@ -1799,9 +1799,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_page_preferences_notification_floating_window_desc">切到后台时 AI 还在回复，显示一个悬浮图标，点开可查看进度、确认工具调用和快速回复</string>
   <string name="setting_page_preferences_notification_overlay_permission">授予悬浮窗权限</string>
   <string name="setting_page_preferences_notification_overlay_permission_desc">没有权限时不会显示悬浮窗</string>
-  <string name="setting_page_preferences_desktop_pet">桌面宠物</string>
-  <string name="setting_page_preferences_desktop_pet_desc">在屏幕最上层常驻一个角色，点一下即可截取画面并向 AI 提问</string>
-  <string name="setting_desktop_pet_enable">显示桌面宠物</string>
+  <string name="setting_page_preferences_desktop_pet">悬浮球</string>
+  <string name="setting_page_preferences_desktop_pet_desc">常驻屏幕最上层的悬浮球：单击展开对话或截屏提问，长按弹出快捷菜单</string>
+  <string name="setting_desktop_pet_enable">显示悬浮球</string>
   <string name="setting_desktop_pet_enable_desc">需要悬浮窗权限，否则无法停留在其他应用上方</string>
   <string name="setting_desktop_pet_group_appearance">形象</string>
   <string name="setting_desktop_pet_avatar">形象</string>

@@ -191,58 +191,6 @@ data class FloatingChatUiState(
         }
 }
 
-/** 收起时的小图标：应用 logo，生成中轮廓不停变形，结束后在角上标出结果 */
-@Composable
-fun ChatFloatingBubble(state: FloatingChatUiState, onClick: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    val logoLayers = rememberAppLogoLayers()
-    val shapePosition = remember { Animatable(0f) }
-    val spin = remember { Animatable(0f) }
-    // 收起到面板时窗口隐藏，帧还在跑，停下动画
-    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
-    val morphing = state.generating && lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
-    // 节奏照搬 LoadingIndicator：固定间隔变一个形状，弹簧和计时同时跑，另外整体匀速自转
-    LaunchedEffect(morphing) {
-        if (!morphing) {
-            // 停在一个完整的形状上
-            shapePosition.animateTo(ceil(shapePosition.value), MorphSpring)
-            return@LaunchedEffect
-        }
-        launch {
-            spin.animateTo(
-                targetValue = spin.value + 360f,
-                animationSpec = infiniteRepeatable(tween(SPIN_DURATION_MILLIS, easing = LinearEasing)),
-            )
-        }
-        while (true) {
-            val morph = launch { shapePosition.animateTo(floor(shapePosition.value) + 1f, MorphSpring) }
-            delay(MORPH_INTERVAL_MILLIS)
-            morph.join()
-        }
-    }
-
-    val logoShape = logoMorphShape(shapePosition.value, extraRotation = spin.value)
-
-    // 不用 Surface：它会吃掉触摸事件，拖动交给 FloatingX 处理
-    Box(modifier = Modifier.padding(6.dp)) {
-        Box(
-            modifier = Modifier
-                .size(52.dp)
-                // 不能用 elevation 阴影：轮廓是凹多边形，每帧都要重新三角剖分，变形时会把 RenderThread 卡住几十秒
-                .dropShadow(logoShape, Shadow(radius = 6.dp, offset = DpOffset(0.dp, 2.dp), alpha = 0.3f))
-                .clip(logoShape)
-                .clickable(onClick = onClick)
-                .drawAppLogo(logoLayers)
-        )
-        when {
-            state.generating -> {}
-            state.error != null -> StatusBadge(HugeIcons.Alert01, colors.error, colors.onError)
-            state.pendingTools.isNotEmpty() -> StatusBadge(HugeIcons.Wrench01, colors.error, colors.onError)
-            state.hasReply -> StatusBadge(HugeIcons.Tick01, colors.primary, colors.onPrimary)
-        }
-    }
-}
-
 @Composable
 private fun BoxScope.StatusBadge(icon: ImageVector, containerColor: Color, contentColor: Color) {
     Box(
