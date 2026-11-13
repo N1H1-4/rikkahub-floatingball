@@ -50,6 +50,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -134,6 +136,15 @@ class ChatFloatingWindows(
         appScope.launch {
             tracker.window.map { it?.expanded }.distinctUntilChanged().collect(::render)
         }
+        // 悬浮窗权限是从设置页跳到系统页面授予的，回来时开关值没变过、设置流不会再发射，
+        // 这里在应用回到前台时自己重画一次，否则球永远装不上
+        appScope.launch {
+            ProcessLifecycleOwner.get().lifecycle.addObserver(
+                LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_START) render(tracker.window.value?.expanded)
+                },
+            )
+        }
         appScope.launch {
             displaySetting.collect { display ->
                 ballVisuals.value = DesktopPetVisuals(
@@ -211,7 +222,11 @@ class ChatFloatingWindows(
         // 合并后的球：开着"桌面宠物"开关就常驻；没有开关时只在有会话可跟时出现
         val ballVisible = !captureInProgress &&
             (displaySetting.value.enableDesktopPet || expanded != null)
-        val ball = bubble ?: installBubble().also { bubble = it }
+        val ball = bubble ?: runCatching { installBubble() }
+            .onFailure { Log.e(TAG, "install floating ball failed", it) }
+            .getOrNull()
+            ?: return
+            .also { bubble = it }
 
         if (expanded == true) {
             ball.hide()
@@ -250,7 +265,7 @@ class ChatFloatingWindows(
 
     private fun installBubble(): FxControl = FloatingX.install(BUBBLE_TAG) {
         compose {
-            WindowContent { state ->
+            WindowContentOrNull { state ->
                 FloatingBall(
                     visuals = ballVisuals.value,
                     state = state,
@@ -366,10 +381,22 @@ class ChatFloatingWindows(
     // 窗口隐藏时生命周期退回 STARTED，只在显示时订阅，流式输出不会让隐藏的窗口跟着重组
     @Composable
     private fun WindowContent(content: @Composable (FloatingChatUiState) -> Unit) {
-        val state by uiState.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.RESUMED)
+        WindowContentOrNull { state -> state?.let { content(it) } }
+    }
+
+    /**
+     * 和 [WindowContent] 一样，但允许"当前没有会话"时也渲染内容。
+     *
+     * 悬浮球是常驻的，没有会话时也要能画出来；之前面板和气泡共用那个只在有会话时才
+     * 组合内容的版本，球就会因为内容为空而变成 0×0 的隐形窗口。
+     */
+    @Composable
+    private fun WindowContentOrNull(content: @Composable (FloatingChatUiState?) -> Unit) {
+        // 悬浮窗没有自己的 Activity 生命周期，用 STARTED 保证退到后台后仍然能更新
+        val state by uiState.collectAsStateWithLifecycle(minActiveState = Lifecycle.State.STARTED)
         RikkahubTheme {
             CompositionLocalProvider(LocalUriHandler provides uriHandler) {
-                state?.let { content(it) }
+                content(state)
             }
         }
     }
