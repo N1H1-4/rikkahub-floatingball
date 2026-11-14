@@ -103,6 +103,8 @@ fun ScreenshotEditor(
     onSave: (Bitmap) -> Unit,
     onSendNewChat: (Bitmap) -> Unit,
     onSendToChat: (Bitmap) -> Unit,
+    /** 进来就选好整张图（"截全屏并提问"用） */
+    initialFullSelection: Boolean = false,
 ) {
     val image = remember(bitmap) { bitmap.asImageBitmap() }
     val state = remember {
@@ -144,6 +146,13 @@ fun ScreenshotEditor(
                 right = (containerWidth + drawWidth) / 2f,
                 bottom = (containerHeight + drawHeight) / 2f,
             )
+        }
+
+        // "截全屏并提问"：进来就把整张图框住，用户只需要决定发到哪
+        LaunchedEffect(initialFullSelection) {
+            if (initialFullSelection && selection == null) {
+                selection = imageBounds
+            }
         }
 
         Image(

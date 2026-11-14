@@ -21,6 +21,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.platform.LocalDensity
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -81,16 +85,34 @@ fun FloatingBall(
     visuals: DesktopPetVisuals,
     state: FloatingChatUiState?,
     menuOpen: Boolean,
+    ringActions: List<FloatingBallAction>,
     onTap: () -> Unit,
     onLongPress: () -> Unit,
     onCloseMenu: () -> Unit,
-    onCapture: () -> Unit,
-    onOpenChat: (() -> Unit)?,
-    onOpenApp: () -> Unit,
+    onRingAction: (FloatingBallAction) -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     val size = BallBaseSize * visuals.sizeScale.coerceIn(DESKTOP_PET_MIN_SCALE, DESKTOP_PET_MAX_SCALE)
     val opacity = visuals.opacity.coerceIn(DESKTOP_PET_MIN_OPACITY, 1f)
+
+    if (menuOpen) {
+        RingMenu(
+            ringActions = ringActions,
+            center = {
+                BallBody(
+                    visuals = visuals,
+                    state = state,
+                    size = size,
+                    opacity = opacity,
+                    onClick = onCloseMenu,
+                    onLongClick = null,
+                )
+            },
+            onRingAction = onRingAction,
+            onCloseMenu = onCloseMenu,
+        )
+        return
+    }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -115,13 +137,92 @@ fun FloatingBall(
             }
         }
 
-        if (menuOpen) {
-            BallMenu(
-                onCapture = onCapture,
-                onOpenChat = onOpenChat,
-                onOpenApp = onOpenApp,
-                onClose = onCloseMenu,
-            )
+    }
+}
+
+/** 球本体：形象 + 状态角标，点击/长按由调用方决定 */
+@Composable
+private fun BallBody(
+    visuals: DesktopPetVisuals,
+    state: FloatingChatUiState?,
+    size: androidx.compose.ui.unit.Dp,
+    opacity: Float,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)?,
+) {
+    val colors = MaterialTheme.colorScheme
+    Box(modifier = Modifier.padding(6.dp).alpha(opacity)) {
+        Box(
+            modifier = Modifier
+                .size(size)
+                .clip(CircleShape)
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            BallFace(visuals = visuals, state = state, size = size)
+        }
+        when {
+            state?.generating == true -> {}
+            state?.error != null -> BallBadge(HugeIcons.Alert01, colors.error, colors.onError)
+            state?.pendingTools?.isNotEmpty() == true -> BallBadge(HugeIcons.Wrench01, colors.error, colors.onError)
+            state?.hasReply == true -> BallBadge(HugeIcons.Tick01, colors.primary, colors.onPrimary)
+        }
+    }
+}
+
+/**
+ * 长按后的环形菜单：兔子在正中间，点它就是关闭悬浮球；
+ * 外圈按设置里的动作画成一圈图标按钮，最多 5 个。
+ */
+@Composable
+private fun RingMenu(
+    ringActions: List<FloatingBallAction>,
+    center: @Composable () -> Unit,
+    onRingAction: (FloatingBallAction) -> Unit,
+    onCloseMenu: () -> Unit,
+) {
+    val count = ringActions.size.coerceAtMost(FloatingBallAction.RingLimit)
+    val ringRadius = 92.dp
+    val itemSize = 48.dp
+    val canvas = ringRadius * 2 + itemSize + 12.dp
+
+    Box(modifier = Modifier.size(canvas), contentAlignment = Alignment.Center) {
+        // 半透明背景，让一圈图标看起来是一体的
+        // 点空白处也能收起
+        Box(
+            modifier = Modifier
+                .size(canvas)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.72f))
+                .clickable(onClick = onCloseMenu),
+        )
+        center()
+        if (count > 0) {
+            val density = LocalDensity.current
+            val radiusPx = with(density) { ringRadius.toPx() }
+            val startAngle = -90f
+            val step = 360f / count
+            ringActions.take(count).forEachIndexed { index, action ->
+                val angle = Math.toRadians((startAngle + step * index).toDouble())
+                val dx = with(density) { (radiusPx * cos(angle).toFloat()).toDp() }
+                val dy = with(density) { (radiusPx * sin(angle).toFloat()).toDp() }
+                Box(
+                    modifier = Modifier
+                        .offset(x = dx, y = dy)
+                        .size(itemSize)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                        .clickable { onRingAction(action) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = action.icon,
+                        contentDescription = action.label,
+                        modifier = Modifier.size(22.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }
@@ -213,50 +314,3 @@ private fun androidx.compose.foundation.layout.BoxScope.BallBadge(
     }
 }
 
-/** 长按弹出的快捷菜单；点任意一项或点菜单外的球都会收起 */
-@Composable
-private fun BallMenu(
-    onCapture: () -> Unit,
-    onOpenChat: (() -> Unit)?,
-    onOpenApp: () -> Unit,
-    onClose: () -> Unit,
-) {
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shadowElevation = 8.dp,
-    ) {
-        Column(modifier = Modifier.padding(6.dp)) {
-            if (onOpenChat != null) {
-                BallMenuItem(HugeIcons.ChatAdd01, "展开对话") {
-                    onClose()
-                    onOpenChat()
-                }
-            }
-            BallMenuItem(HugeIcons.Crop, "截图提问") {
-                onClose()
-                onCapture()
-            }
-            BallMenuItem(HugeIcons.ChatAdd01, "打开 RikkaHub") {
-                onClose()
-                onOpenApp()
-            }
-        }
-    }
-}
-
-@Composable
-private fun BallMenuItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp)
-            .widthIn(min = 132.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-        Text(text = label, style = MaterialTheme.typography.bodyMedium)
-    }
-}

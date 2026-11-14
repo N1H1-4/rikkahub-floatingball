@@ -31,6 +31,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.petterp.floatingx.compose.compose
 import com.petterp.floatingx.core.FloatingX
+import me.rerere.rikkahub.EXTRA_TARGET_ROUTE
+import me.rerere.rikkahub.ui.screenshot.EXTRA_FULL_SELECTION
+import me.rerere.rikkahub.RouteActivity
+import me.rerere.rikkahub.RouteTarget
+import me.rerere.rikkahub.ui.screenshot.ScreenCaptureActivity
 import me.rerere.rikkahub.data.datastore.DisplaySetting
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import com.petterp.floatingx.core.layout.FxHalfHide
@@ -87,6 +92,8 @@ private const val PANEL_CORNER_RADIUS_DP = 28f
 private const val PREVIEW_ALPHA = 0xE6
 private const val PREVIEW_FADE_MILLIS = 90L
 private const val RESIZE_ITERATIONS = 3
+private const val BALL_RING_CANVAS_DP = 244f
+private const val BALL_HALF_HIDE_RATIO = 0.55f
 
 /**
  * 把 [ChatFloatingTracker] 的结果显示成系统悬浮窗：收起时是贴边的小图标，展开是固定在顶部的面板。
@@ -154,13 +161,7 @@ class ChatFloatingWindows(
                 )
                 runCatching {
                     bubble?.update {
-                        adsorb(
-                            when {
-                                !display.desktopPetDockToEdge -> FxAdsorb.none()
-                                display.desktopPetAutoHide -> FxAdsorb.horizontal(FxHalfHide(0.55f))
-                                else -> FxAdsorb.horizontal()
-                            }
-                        )
+                        adsorb(adsorbFor(display))
                     }
                 }.onFailure { Log.w(TAG, "update ball adsorb failed", it) }
                 render(tracker.window.value?.expanded)
@@ -270,12 +271,11 @@ class ChatFloatingWindows(
                     visuals = ballVisuals.value,
                     state = state,
                     menuOpen = ballMenuOpen.value,
+                    ringActions = ringActionsOf(displaySetting.value),
                     onTap = ::onBallTap,
-                    onLongPress = { ballMenuOpen.value = true },
-                    onCloseMenu = { ballMenuOpen.value = false },
-                    onCapture = ::launchCapture,
-                    onOpenChat = if (tracker.window.value != null) tracker::expand else null,
-                    onOpenApp = ::openApp,
+                    onLongPress = ::openBallMenu,
+                    onCloseMenu = ::closeBallMenu,
+                    onRingAction = ::onRingAction,
                 )
             }
         }
@@ -287,22 +287,82 @@ class ChatFloatingWindows(
         systemHost(context) { permission(FxPermissionStrategy.skip()) }
     }
 
-    /** 单击：有正在跟的会话就展开面板，否则直接进选区截屏 */
-    private fun onBallTap() {
+    /** 打开环形菜单：先取消贴边半隐并把窗口挪进屏幕，否则菜单会有一半在屏幕外 */
+    private fun openBallMenu() {
+        ballMenuOpen.value = true
+        val control = bubble ?: return
+        val y = control.position.y
+        runCatching {
+            control.update { adsorb(FxAdsorb.none()) }
+            val ringWidth = dp(BALL_RING_CANVAS_DP)
+            val left = ((safeScreenWidth() - ringWidth) / 2f).coerceAtLeast(0f)
+            control.moveTo(left, y, animate = false)
+        }.onFailure { Log.w(TAG, "open ball menu failed", it) }
+    }
+
+    private fun closeBallMenu() {
         ballMenuOpen.value = false
-        if (tracker.window.value != null) {
-            tracker.expand()
-        } else {
-            launchCapture()
+        bubble?.let { control ->
+            runCatching { control.update { adsorb(adsorbFor(displaySetting.value)) } }
+                .onFailure { Log.w(TAG, "restore ball adsorb failed", it) }
         }
     }
 
-    private fun launchCapture() {
+    private fun adsorbFor(display: DisplaySetting): FxAdsorb = when {
+        !display.desktopPetDockToEdge -> FxAdsorb.none()
+        display.desktopPetAutoHide -> FxAdsorb.horizontal(FxHalfHide(BALL_HALF_HIDE_RATIO))
+        else -> FxAdsorb.horizontal()
+    }
+
+    private fun ringActionsOf(display: DisplaySetting): List<FloatingBallAction> =
+        display.ballRingActions
+            .mapNotNull(FloatingBallAction::fromId)
+            .take(FloatingBallAction.RingLimit)
+
+    /** 单击：执行设置里选的动作；"自动判断"时按有没有在跟的会话分流 */
+    private fun onBallTap() {
+        ballMenuOpen.value = false
+        val action = FloatingBallAction.fromId(displaySetting.value.ballTapAction)
+            ?: FloatingBallAction.Auto
+        when {
+            action == FloatingBallAction.Auto && tracker.window.value != null -> tracker.expand()
+            action == FloatingBallAction.Auto -> launchCapture()
+            else -> onRingAction(action)
+        }
+    }
+
+    private fun onRingAction(action: FloatingBallAction) {
+        ballMenuOpen.value = false
+        when (action) {
+            FloatingBallAction.Auto -> onBallTap()
+            FloatingBallAction.NewChat -> tracker.openConversation(Uuid.random())
+            FloatingBallAction.History -> openApp(RouteTarget.History)
+            FloatingBallAction.OpenApp -> openApp(null)
+            FloatingBallAction.FullScreenCapture -> launchCapture(fullSelection = true)
+            FloatingBallAction.RegionCapture -> launchCapture()
+            FloatingBallAction.CloseBall -> closeBall()
+            FloatingBallAction.Settings -> openApp(RouteTarget.Settings)
+            FloatingBallAction.Stats -> openApp(RouteTarget.Stats)
+            FloatingBallAction.SwitchAssistant -> openApp(RouteTarget.Assistant)
+        }
+    }
+
+    /** 关掉开关就等于收起悬浮球（可以再从设置里打开） */
+    private fun closeBall() {
+        appScope.launch {
+            settingsStore.update { settings ->
+                settings.copy(displaySetting = settings.displaySetting.copy(enableDesktopPet = false))
+            }
+        }
+    }
+
+    private fun launchCapture(fullSelection: Boolean = false) {
         onCaptureStarted()
         runCatching {
             context.startActivity(
-                Intent(context, me.rerere.rikkahub.ui.screenshot.ScreenCaptureActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                Intent(context, ScreenCaptureActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    .putExtra(EXTRA_FULL_SELECTION, fullSelection),
             )
         }.onFailure {
             Log.e(TAG, "launch capture failed", it)
@@ -310,12 +370,12 @@ class ChatFloatingWindows(
         }
     }
 
-    private fun openApp() {
+    private fun openApp(target: RouteTarget?) {
         runCatching {
-            context.startActivity(
-                Intent(context, me.rerere.rikkahub.RouteActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
+            val intent = Intent(context, RouteActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (target != null) intent.putExtra(EXTRA_TARGET_ROUTE, target.id)
+            context.startActivity(intent)
         }.onFailure { Log.w(TAG, "open app failed", it) }
     }
 

@@ -178,6 +178,11 @@ data class DisplaySetting(
     val enableDesktopPet: Boolean = false,
     // 桌宠形象，和助手头像共用同一套选项（图片 / Emoji / URL / 重置）
     val desktopPetAvatar: Avatar = Avatar.Dummy,
+    /** 点击球默认触发的动作，存 FloatingBallAction.id */
+    val ballTapAction: String = "auto",
+    /** 长按环形菜单里的动作，最多 5 个，存 FloatingBallAction.id */
+    val ballRingActions: List<String> =
+        listOf("new_chat", "history", "region_capture", "open_app", "close"),
     val desktopPetSize: Float = 1f,
     val desktopPetOpacity: Float = 1f,
     val desktopPetDockToEdge: Boolean = true,

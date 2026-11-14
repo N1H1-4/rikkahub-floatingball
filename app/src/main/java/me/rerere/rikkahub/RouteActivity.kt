@@ -152,6 +152,25 @@ private const val TAG = "RouteActivity"
 private const val ACTION_TRANSLATE = "me.rerere.rikkahub.action.TRANSLATE"
 private const val ACTION_MEDIA_CREATION = "me.rerere.rikkahub.action.MEDIA_CREATION"
 private const val EXTRA_CONVERSATION_ID = "conversationId"
+
+/** 悬浮球动作要直接跳到某个页面时带的路由 id，见 [RouteTarget] */
+const val EXTRA_TARGET_ROUTE = "targetRoute"
+
+/**
+ * 悬浮球快捷动作能直接打开的页面。
+ * 只放"一进来就能独立使用"的页面；需要参数的不在此列。
+ */
+enum class RouteTarget(val id: String, val screen: Screen) {
+    History("history", Screen.History),
+    Settings("settings", Screen.Setting),
+    Stats("stats", Screen.Stats),
+    Assistant("assistant", Screen.Assistant),
+    ;
+
+    companion object {
+        fun fromId(id: String): RouteTarget? = entries.firstOrNull { it.id == id }
+    }
+}
 private const val EXTRA_CHAT_TEXT = "chatText"
 private const val EXTRA_CHAT_FILES = "chatFiles"
 
@@ -290,7 +309,10 @@ class RouteActivity : ComponentActivity() {
             Intent.ACTION_PROCESS_TEXT -> Screen.ShareHandler(
                 text = intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString().orEmpty(),
             )
-            else -> mediaCreationDestination(intent)
+            else -> intent.getStringExtra(EXTRA_TARGET_ROUTE)
+                ?.let(RouteTarget::fromId)
+                ?.screen
+                ?: mediaCreationDestination(intent)
                 ?: intent.getStringExtra(EXTRA_CONVERSATION_ID)?.let { id ->
                     Screen.Chat(
                         id = id,

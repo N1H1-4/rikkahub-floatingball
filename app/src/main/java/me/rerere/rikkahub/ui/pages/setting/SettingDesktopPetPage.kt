@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -42,6 +44,16 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.Delete02
 import me.rerere.hugeicons.stroke.Robot01
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.TextButton
+import me.rerere.rikkahub.ui.floating.FloatingBallAction
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DisplaySetting
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -70,6 +82,12 @@ fun SettingDesktopPetPage(vm: SettingVM = koinViewModel()) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     var canDrawOverlays by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+    var showTapDialog by remember { mutableStateOf(false) }
+    var showRingDialog by remember { mutableStateOf(false) }
+    val tapAction = FloatingBallAction.fromId(displaySetting.ballTapAction) ?: FloatingBallAction.Auto
+    val ringActions = displaySetting.ballRingActions
+        .mapNotNull(FloatingBallAction::fromId)
+        .take(FloatingBallAction.RingLimit)
     // 从系统授权页回来时刷新
     LifecycleResumeEffect(Unit) {
         canDrawOverlays = Settings.canDrawOverlays(context)
@@ -201,6 +219,124 @@ fun SettingDesktopPetPage(vm: SettingVM = koinViewModel()) {
                     )
                 }
             }
+
+            item {
+                CardGroup(title = { Text("快捷操作") }) {
+                    item(
+                        onClick = { showTapDialog = true },
+                        headlineContent = { Text("点击悬浮球") },
+                        supportingContent = { Text(tapAction.label) },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, contentDescription = null) },
+                    )
+                    item(
+                        onClick = { showRingDialog = true },
+                        headlineContent = { Text("环形菜单") },
+                        supportingContent = {
+                            Text(
+                                if (ringActions.isEmpty()) {
+                                    "尚未选择（长按悬浮球只会显示关闭按钮）"
+                                } else {
+                                    ringActions.joinToString(" / ") { it.label }
+                                }
+                            )
+                        },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, contentDescription = null) },
+                    )
+                }
+            }
         }
     }
+
+    if (showTapDialog) {
+        TapActionDialog(
+            current = tapAction,
+            onPick = { action ->
+                update(displaySetting.copy(ballTapAction = action.id))
+                showTapDialog = false
+            },
+            onDismiss = { showTapDialog = false },
+        )
+    }
+
+    if (showRingDialog) {
+        RingActionDialog(
+            selected = displaySetting.ballRingActions,
+            onChange = { picked -> update(displaySetting.copy(ballRingActions = picked)) },
+            onDismiss = { showRingDialog = false },
+        )
+    }
+}
+
+/** 点击悬浮球默认动作的单选对话框 */
+@Composable
+private fun TapActionDialog(
+    current: FloatingBallAction,
+    onPick: (FloatingBallAction) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("点击悬浮球时") },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                (listOf(FloatingBallAction.Auto) + FloatingBallAction.ringCandidates).forEach { action ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPick(action) }
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = action == current, onClick = { onPick(action) })
+                        Spacer(Modifier.size(8.dp))
+                        Icon(action.icon, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.size(10.dp))
+                        Text(action.label)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("关闭") }
+        },
+    )
+}
+
+/** 环形菜单的多选对话框，最多 5 个，按勾选顺序排列 */
+@Composable
+private fun RingActionDialog(
+    selected: List<String>,
+    onChange: (List<String>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("环形菜单（最多 ${FloatingBallAction.RingLimit} 个）") },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                FloatingBallAction.ringCandidates.forEach { action ->
+                    val checked = action.id in selected
+                    val enabled = checked || selected.size < FloatingBallAction.RingLimit
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = enabled) {
+                                onChange(if (checked) selected - action.id else selected + action.id)
+                            }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = checked, onCheckedChange = null, enabled = enabled)
+                        Spacer(Modifier.size(8.dp))
+                        Icon(action.icon, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.size(10.dp))
+                        Text(action.label)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("完成") }
+        },
+    )
 }

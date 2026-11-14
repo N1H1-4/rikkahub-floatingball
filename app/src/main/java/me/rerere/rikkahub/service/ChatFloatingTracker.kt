@@ -114,6 +114,12 @@ class ChatFloatingTracker(
     }
 
     /** 截图"发送到对话"：钉住指定会话并把这张图挂到面板的输入框上 */
+    /** 只钉住某个会话（不带图片），用于"悬浮窗新对话/打开历史会话" */
+    fun openConversation(conversationId: Uuid) {
+        pinned.value = conversationId
+        pinnedExpanded.value = true
+    }
+
     fun openDraft(conversationId: Uuid, imageUrl: String) {
         pinned.value = conversationId
         pinnedExpanded.value = true
