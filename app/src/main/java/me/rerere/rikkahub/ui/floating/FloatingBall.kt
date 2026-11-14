@@ -193,7 +193,7 @@ private fun RingMenu(
             modifier = Modifier
                 .size(canvas)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.72f))
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.86f))
                 .clickable(onClick = onCloseMenu),
         )
         center()
@@ -218,8 +218,8 @@ private fun RingMenu(
                     Icon(
                         imageVector = action.icon,
                         contentDescription = action.label,
-                        modifier = Modifier.size(22.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.onSurface,
                     )
                 }
             }
