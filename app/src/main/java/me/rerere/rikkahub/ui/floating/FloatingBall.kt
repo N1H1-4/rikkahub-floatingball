@@ -86,6 +86,8 @@ fun FloatingBall(
     state: FloatingChatUiState?,
     menuOpen: Boolean,
     ringActions: List<FloatingBallAction>,
+    /** 球贴在哪一侧：决定半圆朝哪边展开 */
+    dockedRight: Boolean,
     onTap: () -> Unit,
     onLongPress: () -> Unit,
     onCloseMenu: () -> Unit,
@@ -98,6 +100,8 @@ fun FloatingBall(
     if (menuOpen) {
         RingMenu(
             ringActions = ringActions,
+            dockedRight = dockedRight,
+            ballSize = size,
             center = {
                 BallBody(
                     visuals = visuals,
@@ -171,44 +175,60 @@ private fun BallBody(
 }
 
 /**
- * 长按后的环形菜单：兔子在正中间，点它就是关闭悬浮球；
- * 外圈按设置里的动作画成一圈图标按钮，最多 5 个。
+ * 长按后的半圆菜单。
+ *
+ * 球**留在原来的贴边位置不动**，动作沿朝向屏幕内侧的 180° 半圆铺开（最多 5 个）；
+ * 点中间的球就是关闭悬浮球，点空白处也能收起。
  */
 @Composable
 private fun RingMenu(
     ringActions: List<FloatingBallAction>,
+    dockedRight: Boolean,
+    ballSize: androidx.compose.ui.unit.Dp,
     center: @Composable () -> Unit,
     onRingAction: (FloatingBallAction) -> Unit,
     onCloseMenu: () -> Unit,
 ) {
     val count = ringActions.size.coerceAtMost(FloatingBallAction.RingLimit)
-    val ringRadius = 92.dp
+    val ringRadius = 104.dp
     val itemSize = 48.dp
-    val canvas = ringRadius * 2 + itemSize + 12.dp
+    val pad = 8.dp
+    // 球贴着的那条边留半个球宽，剩下的是半圆半径，所以窗口只在屏幕内侧长大
+    // 最左那个图标的圆心在 ballCenterX - ringRadius，得给它留出半个图标宽，否则会被窗口裁掉
+    val canvasWidth = ringRadius + ballSize / 2 + itemSize / 2 + pad
+    val canvasHeight = ringRadius * 2 + itemSize
 
-    Box(modifier = Modifier.size(canvas), contentAlignment = Alignment.Center) {
-        // 半透明背景，让一圈图标看起来是一体的
-        // 点空白处也能收起
+    Box(
+        modifier = Modifier.size(width = canvasWidth, height = canvasHeight),
+        contentAlignment = if (dockedRight) Alignment.CenterEnd else Alignment.CenterStart,
+    ) {
+        // 透明的一层：点空白处收起。不再画共享背景，免得上下两个图标被顶到圆圈外面
         Box(
             modifier = Modifier
-                .size(canvas)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.86f))
+                .size(width = canvasWidth, height = canvasHeight)
                 .clickable(onClick = onCloseMenu),
         )
         center()
+
         if (count > 0) {
             val density = LocalDensity.current
             val radiusPx = with(density) { ringRadius.toPx() }
-            val startAngle = -90f
-            val step = 360f / count
+            // 0° 指向屏幕内侧（贴右边时朝左），-90° 朝上，+90° 朝下
+            val angles = if (count == 1) {
+                listOf(0f)
+            } else {
+                List(count) { index -> -90f + 180f * index / (count - 1) }
+            }
             ringActions.take(count).forEachIndexed { index, action ->
-                val angle = Math.toRadians((startAngle + step * index).toDouble())
-                val dx = with(density) { (radiusPx * cos(angle).toFloat()).toDp() }
-                val dy = with(density) { (radiusPx * sin(angle).toFloat()).toDp() }
+                val rad = Math.toRadians(angles[index].toDouble())
+                val dx = with(density) { (radiusPx * cos(rad).toFloat()).toDp() }
+                val dy = with(density) { (radiusPx * sin(rad).toFloat()).toDp() }
                 Box(
                     modifier = Modifier
-                        .offset(x = dx, y = dy)
+                        .offset(
+                            x = if (dockedRight) -dx else dx,
+                            y = dy,
+                        )
                         .size(itemSize)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.surfaceContainerHigh)

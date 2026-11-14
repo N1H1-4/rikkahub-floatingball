@@ -92,7 +92,7 @@ private const val PANEL_CORNER_RADIUS_DP = 28f
 private const val PREVIEW_ALPHA = 0xE6
 private const val PREVIEW_FADE_MILLIS = 90L
 private const val RESIZE_ITERATIONS = 3
-private const val BALL_RING_CANVAS_DP = 244f
+private const val BALL_SIZE_DP = 52f
 private const val BALL_HALF_HIDE_RATIO = 0.55f
 
 /**
@@ -113,6 +113,8 @@ class ChatFloatingWindows(
     // 合并后的球：形象跟着显示设置走，窗口小且常驻
     private val ballVisuals = mutableStateOf(DesktopPetVisuals())
     private val ballMenuOpen = mutableStateOf(false)
+    // 球贴在哪一侧：菜单是朝屏幕内侧展开的半圆
+    private val ballDockedRight = mutableStateOf(true)
     private var captureInProgress = false
 
     private val displaySetting: StateFlow<DisplaySetting> = settingsStore.settingsFlow
@@ -272,6 +274,7 @@ class ChatFloatingWindows(
                     state = state,
                     menuOpen = ballMenuOpen.value,
                     ringActions = ringActionsOf(displaySetting.value),
+                    dockedRight = ballDockedRight.value,
                     onTap = ::onBallTap,
                     onLongPress = ::openBallMenu,
                     onCloseMenu = ::closeBallMenu,
@@ -287,17 +290,16 @@ class ChatFloatingWindows(
         systemHost(context) { permission(FxPermissionStrategy.skip()) }
     }
 
-    /** 打开环形菜单：先取消贴边半隐并把窗口挪进屏幕，否则菜单会有一半在屏幕外 */
+    /**
+     * 打开半圆菜单：球留在原地，只取消贴边半隐（否则半隐时菜单会被裁掉）。
+     * 窗口只会朝屏幕内侧变大，所以球看起来没动。
+     */
     private fun openBallMenu() {
         ballMenuOpen.value = true
         val control = bubble ?: return
-        val y = control.position.y
-        runCatching {
-            control.update { adsorb(FxAdsorb.none()) }
-            val ringWidth = dp(BALL_RING_CANVAS_DP)
-            val left = ((safeScreenWidth() - ringWidth) / 2f).coerceAtLeast(0f)
-            control.moveTo(left, y, animate = false)
-        }.onFailure { Log.w(TAG, "open ball menu failed", it) }
+        ballDockedRight.value = control.position.x + dp(BALL_SIZE_DP / 2f) > safeScreenWidth() / 2f
+        runCatching { control.update { adsorb(FxAdsorb.none()) } }
+            .onFailure { Log.w(TAG, "open ball menu failed", it) }
     }
 
     private fun closeBallMenu() {
