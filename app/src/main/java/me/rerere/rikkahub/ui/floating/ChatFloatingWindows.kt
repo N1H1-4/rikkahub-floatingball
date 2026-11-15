@@ -325,15 +325,27 @@ class ChatFloatingWindows(
         ballMenuOpen.value = true
         val control = bubble ?: return
         ballDockedRight.value = control.position.x + dp(BALL_SIZE_DP / 2f) > safeScreenWidth() / 2f
-        runCatching { control.update { adsorb(FxAdsorb.none()) } }
-            .onFailure { Log.w(TAG, "open ball menu failed", it) }
+        runCatching {
+            control.update {
+                // 半隐状态下菜单会被裁掉，先取消吸附
+                adsorb(FxAdsorb.none())
+                // 关键：关掉拖动。长按要按住好几百毫秒，手指的轻微移动会被当成拖动，
+                // 菜单弹出的同时窗口就被挪走了。改手势配置会触发 FxGestureDetector.cancel()，
+                // 连正在进行的拖动也会被中断。
+                gesture(FxGesture(click = true, longPress = true, drag = FxDrag.DISABLED))
+            }
+        }.onFailure { Log.w(TAG, "open ball menu failed", it) }
     }
 
     private fun closeBallMenu() {
         ballMenuOpen.value = false
         bubble?.let { control ->
-            runCatching { control.update { adsorb(adsorbFor(displaySetting.value)) } }
-                .onFailure { Log.w(TAG, "restore ball adsorb failed", it) }
+            runCatching {
+                control.update {
+                    adsorb(adsorbFor(displaySetting.value))
+                    gesture(FxGesture(click = true, longPress = true, drag = FxDrag.IMMEDIATE))
+                }
+            }.onFailure { Log.w(TAG, "restore ball config failed", it) }
         }
     }
 
