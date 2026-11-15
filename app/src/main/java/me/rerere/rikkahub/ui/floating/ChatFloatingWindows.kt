@@ -83,6 +83,7 @@ import kotlin.uuid.Uuid
 private const val TAG = "ChatFloatingWindows"
 private const val BUBBLE_TAG = "chat_floating_bubble"
 private const val PANEL_TAG = "chat_floating_panel"
+private const val LIST_TAG = "chat_floating_list"
 private const val PANEL_TOP_OFFSET_DP = 8f
 private const val PANEL_MAX_WIDTH_DP = 560f
 private const val PANEL_MIN_WIDTH_DP = 320f
@@ -117,6 +118,9 @@ class ChatFloatingWindows(
     private val windowManager = context.getSystemService(WindowManager::class.java)
     private var bubble: FxControl? = null
     private var panel: FxControl? = null
+    // 悬浮球旁边弹出的列表（历史会话 / 切换助手）
+    private var listControl: FxControl? = null
+    private val listMode = mutableStateOf<FloatingListMode?>(null)
 
     // 合并后的球：形象跟着显示设置走，窗口小且常驻
     private val ballVisuals = mutableStateOf(DesktopPetVisuals())
@@ -297,6 +301,46 @@ class ChatFloatingWindows(
         control.show()
     }
 
+    private fun installList(): FxControl = FloatingX.install(LIST_TAG) {
+        compose {
+            WindowContentOrNull { _ ->
+                val mode = listMode.value ?: return@WindowContentOrNull
+                FloatingListCard(
+                    mode = mode,
+                    onPickConversation = { id ->
+                        hideList()
+                        tracker.openConversation(id)
+                    },
+                    onPickAssistant = { id ->
+                        hideList()
+                        appScope.launch { settingsStore.selectAssistant(id) }
+                        tracker.openConversation(Uuid.random())
+                    },
+                    onDismiss = ::hideList,
+                )
+            }
+        }
+        anchor(FxGravity.CENTER_END, dy = -dp(120f))
+        margin(left = dp(8f), right = dp(8f))
+        adsorb(FxAdsorb.none())
+        animation(FxAnimations.fade())
+        systemHost(context) { permission(FxPermissionStrategy.skip()) }
+    }
+
+    /** 弹出历史会话 / 切换助手的浮层列表，球先藏起来避免被挡住 */
+    private fun showList(mode: FloatingListMode) {
+        ballMenuOpen.value = false
+        listMode.value = mode
+        bubble?.hide()
+        (listControl ?: installList().also { listControl = it }).show()
+    }
+
+    private fun hideList() {
+        listMode.value = null
+        listControl?.hide()
+        render(tracker.window.value?.expanded)
+    }
+
     private fun installBubble(): FxControl = FloatingX.install(BUBBLE_TAG) {
         compose {
             WindowContentOrNull { state ->
@@ -402,14 +446,14 @@ class ChatFloatingWindows(
         when (action) {
             FloatingBallAction.Auto -> onBallTap()
             FloatingBallAction.NewChat -> tracker.openConversation(Uuid.random())
-            FloatingBallAction.History -> openApp(RouteTarget.History)
+            FloatingBallAction.History -> showList(FloatingListMode.History)
             FloatingBallAction.OpenApp -> openApp(null)
             FloatingBallAction.FullScreenCapture -> launchCapture(sendImmediately = true)
             FloatingBallAction.RegionCapture -> launchCapture()
             FloatingBallAction.CloseBall -> closeBall()
             FloatingBallAction.Settings -> openApp(RouteTarget.Settings)
             FloatingBallAction.Stats -> openApp(RouteTarget.Stats)
-            FloatingBallAction.SwitchAssistant -> openApp(RouteTarget.Assistant)
+            FloatingBallAction.SwitchAssistant -> showList(FloatingListMode.Assistants)
         }
     }
 
