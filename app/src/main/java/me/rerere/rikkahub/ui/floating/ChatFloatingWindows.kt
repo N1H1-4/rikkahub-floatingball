@@ -95,6 +95,10 @@ private const val PREVIEW_ALPHA = 0xE6
 private const val PREVIEW_FADE_MILLIS = 90L
 private const val RESIZE_ITERATIONS = 3
 private const val BALL_SIZE_DP = 52f
+private const val BALL_RING_RADIUS_DP = 104f
+private const val BALL_RING_ITEM_DP = 48f
+private const val BALL_RING_PAD_DP = 8f
+private const val BALL_BODY_PADDING_DP = 12f
 private const val BALL_HALF_HIDE_RATIO = 0.55f
 
 /**
@@ -322,9 +326,30 @@ class ChatFloatingWindows(
      * 窗口只会朝屏幕内侧变大，所以球看起来没动。
      */
     private fun openBallMenu() {
-        ballMenuOpen.value = true
         val control = bubble ?: return
-        ballDockedRight.value = control.position.x + dp(BALL_SIZE_DP / 2f) > safeScreenWidth() / 2f
+        val density = context.resources.displayMetrics.density
+        val ballSize = dp(BALL_SIZE_DP * displaySetting.value.desktopPetSize)
+        // 记下球心原来的屏幕位置，菜单展开后要把它钉回这儿
+        val halfBody = (ballSize + dp(BALL_BODY_PADDING_DP)) / 2f
+        val centerX = control.position.x + halfBody
+        val centerY = control.position.y + halfBody
+
+        ballMenuOpen.value = true
+        ballDockedRight.value = centerX > safeScreenWidth() / 2f
+        val canvasWidth = dp(BALL_RING_RADIUS_DP) + ballSize / 2f +
+            dp(BALL_RING_ITEM_DP) / 2f + dp(BALL_RING_PAD_DP)
+        val canvasHeight = dp(BALL_RING_RADIUS_DP) * 2f + dp(BALL_RING_ITEM_DP)
+        // 球在环形画布里的中心偏移（CenterEnd + 6dp 内边距）
+        val offsetX = canvasWidth - dp(BALL_BODY_PADDING_DP) / 2f - ballSize / 2f
+        val offsetY = canvasHeight / 2f
+        Log.i(TAG, "openBallMenu ball=$ballSize canvas=${canvasWidth}x$canvasHeight center=($centerX,$centerY)")
+
+        // 窗口尺寸是下一帧才变的，等一帧再校正位置
+        control.contentView?.post {
+            runCatching {
+                control.moveTo(centerX - offsetX, centerY - offsetY, animate = false)
+            }.onFailure { Log.w(TAG, "restore ball position failed", it) }
+        }
         runCatching {
             control.update {
                 // 半隐状态下菜单会被裁掉，先取消吸附

@@ -5,7 +5,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ChatAdd01
 import me.rerere.hugeicons.stroke.Clock01
 import me.rerere.hugeicons.stroke.Crop
-import me.rerere.hugeicons.stroke.Fullscreen
+import me.rerere.hugeicons.stroke.ScissorRectangle
 import me.rerere.hugeicons.stroke.Settings01
 import me.rerere.hugeicons.stroke.Chart01
 import me.rerere.hugeicons.stroke.Cancel01
@@ -25,7 +25,7 @@ enum class FloatingBallAction(
     NewChat("new_chat", "悬浮窗新对话", HugeIcons.ChatAdd01),
     History("history", "历史会话", HugeIcons.Clock01),
     OpenApp("open_app", "打开 RikkaHub", HugeIcons.Rocket01),
-    FullScreenCapture("full_capture", "截全屏并提问", HugeIcons.Fullscreen),
+    FullScreenCapture("full_capture", "截全屏并提问", HugeIcons.ScissorRectangle),
     RegionCapture("region_capture", "选区截图", HugeIcons.Crop),
     CloseBall("close", "关闭悬浮球", HugeIcons.Cancel01),
     Settings("settings", "打开设置", HugeIcons.Settings01),

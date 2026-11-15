@@ -63,7 +63,12 @@ import me.rerere.rikkahub.ui.components.ui.rememberAppLogoLayers
 import kotlin.math.ceil
 import kotlin.math.floor
 
-private val BallBaseSize = 52.dp
+internal val BallBaseSize = 52.dp
+// 环形菜单几何：窗口层要用它把球钉回原位
+internal val BallRingRadius = 104.dp
+internal val BallRingItem = 48.dp
+internal val BallRingPad = 8.dp
+internal val BallBodyPadding = 6.dp
 private val BallMorphSpring = spring<Float>(
     dampingRatio = 0.6f,
     stiffness = 200f,
@@ -190,9 +195,9 @@ private fun RingMenu(
     onCloseMenu: () -> Unit,
 ) {
     val count = ringActions.size.coerceAtMost(FloatingBallAction.RingLimit)
-    val ringRadius = 104.dp
-    val itemSize = 48.dp
-    val pad = 8.dp
+    val ringRadius = BallRingRadius
+    val itemSize = BallRingItem
+    val pad = BallRingPad
     // 球贴着的那条边留半个球宽，剩下的是半圆半径，所以窗口只在屏幕内侧长大
     // 最左那个图标的圆心在 ballCenterX - ringRadius，得给它留出半个图标宽，否则会被窗口裁掉
     val canvasWidth = ringRadius + ballSize / 2 + itemSize / 2 + pad
