@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -238,6 +239,7 @@ fun ChatFloatingPanel(
     var replyText by rememberSaveable(state.conversationId) { mutableStateOf("") }
     var modelsOpen by remember { mutableStateOf(false) }
     var reasoningOpen by remember { mutableStateOf(false) }
+    var quickOpen by remember { mutableStateOf(false) }
 
     val phase = state.panelPhase
 
@@ -308,7 +310,11 @@ fun ChatFloatingPanel(
                     conversationId = state.conversationId,
                     draftImage = draftImage,
                     onRemoveDraft = onRemoveDraft,
-                    onApplyQuickMessage = { replyText = it },
+                    onApplyQuickMessage = {
+                        replyText = it
+                        quickOpen = false
+                    },
+                    quickOpen = quickOpen,
                     // 输出结束后模型/思考深度按钮挪到下面输入框那一行，这一行就能收窄
                     showModelControls = phase != PanelPhase.Finished,
                     modelsOpen = modelsOpen,
@@ -328,6 +334,17 @@ fun ChatFloatingPanel(
                     generating = state.generating,
                     canSendEmpty = draftImage != null,
                     requestFocus = phase == PanelPhase.Idle,
+                    leadingControls = {
+                        QuickMessageToggle(
+                            conversationId = state.conversationId,
+                            expanded = quickOpen,
+                            onToggle = {
+                                quickOpen = !quickOpen
+                                modelsOpen = false
+                                reasoningOpen = false
+                            },
+                        )
+                    },
                     onSend = {
                         replyText = ""
                         onSend(it)
@@ -672,6 +689,8 @@ private fun ReplyBar(
     canSendEmpty: Boolean = false,
     /** 空对话阶段自动聚焦并弹键盘，方便直接 quick reply */
     requestFocus: Boolean = false,
+    /** 插在输入框左边的东西（快捷消息按钮） */
+    leadingControls: (@Composable () -> Unit)? = null,
     /** 插在输入框和发送键之间的东西（输出完成后放模型/思考深度按钮） */
     trailingControls: (@Composable () -> Unit)? = null,
 ) {
@@ -698,6 +717,7 @@ private fun ReplyBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        leadingControls?.invoke()
         TextField(
             value = text,
             onValueChange = onTextChange,
@@ -746,6 +766,8 @@ private fun ComposerToolbar(
     draftImage: String?,
     onRemoveDraft: () -> Unit,
     onApplyQuickMessage: (String) -> Unit,
+    /** 快捷消息默认收起，点了输入框左边的闪电才展开，平时不占一行 */
+    quickOpen: Boolean,
     /** false 时把模型/思考深度按钮让给下面输入框那一行（输出完成阶段） */
     showModelControls: Boolean,
     modelsOpen: Boolean,
@@ -762,6 +784,11 @@ private fun ComposerToolbar(
     val quickMessages = settings.getQuickMessagesOfAssistant(assistant)
     val scope = rememberCoroutineScope()
 
+    // 没有草稿、不需要模型按钮、快捷消息也没展开时，这一整块都不占空间
+    if (draftImage == null && !showModelControls && !quickOpen && !modelsOpen && !reasoningOpen) {
+        return
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -770,18 +797,22 @@ private fun ComposerToolbar(
             if (draftImage != null) {
                 DraftAttachment(image = draftImage, onRemove = onRemoveDraft)
             }
-            LazyRow(
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                items(quickMessages, key = { it.id.toString() }) { quickMessage ->
-                    ComposerChip(
-                        label = quickMessage.title.ifBlank { quickMessage.content },
-                        selected = false,
-                        onClick = { onApplyQuickMessage(quickMessage.content) },
-                    )
+            if (quickOpen) {
+                LazyRow(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    items(quickMessages, key = { it.id.toString() }) { quickMessage ->
+                        ComposerChip(
+                            label = quickMessage.title.ifBlank { quickMessage.content },
+                            selected = false,
+                            onClick = { onApplyQuickMessage(quickMessage.content) },
+                        )
+                    }
                 }
+            } else {
+                Spacer(Modifier.weight(1f))
             }
             // 模型/思考深度：输出完成阶段挪到下面输入行，这里就不画了
             if (showModelControls) {
@@ -912,6 +943,25 @@ private fun ComposerChip(label: String, selected: Boolean, onClick: () -> Unit) 
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
         )
+    }
+}
+
+/** 输入框左边的闪电：展开/收起快捷消息。没有快捷消息时不显示 */
+@Composable
+private fun QuickMessageToggle(conversationId: Uuid, expanded: Boolean, onToggle: () -> Unit) {
+    val chatService = koinInject<ChatService>()
+    val settingsStore = koinInject<SettingsStore>()
+    val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
+    val conversation by chatService.getConversationFlow(conversationId).collectAsStateWithLifecycle()
+    val quickMessages = settings.getQuickMessagesOfAssistant(settings.getAssistantOf(conversation))
+    if (quickMessages.isEmpty()) return
+
+    ComposerIconButton(
+        label = "快捷消息",
+        selected = expanded,
+        onClick = onToggle,
+    ) {
+        Icon(HugeIcons.Zap, contentDescription = null, modifier = Modifier.size(20.dp))
     }
 }
 
