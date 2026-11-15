@@ -32,7 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.petterp.floatingx.compose.compose
 import com.petterp.floatingx.core.FloatingX
 import me.rerere.rikkahub.EXTRA_TARGET_ROUTE
-import me.rerere.rikkahub.ui.screenshot.EXTRA_FULL_SELECTION
+import me.rerere.rikkahub.ui.screenshot.EXTRA_SEND_IMMEDIATELY
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.RouteTarget
 import me.rerere.rikkahub.ui.screenshot.ScreenCaptureActivity
@@ -379,7 +379,7 @@ class ChatFloatingWindows(
             FloatingBallAction.NewChat -> tracker.openConversation(Uuid.random())
             FloatingBallAction.History -> openApp(RouteTarget.History)
             FloatingBallAction.OpenApp -> openApp(null)
-            FloatingBallAction.FullScreenCapture -> launchCapture(fullSelection = true)
+            FloatingBallAction.FullScreenCapture -> launchCapture(sendImmediately = true)
             FloatingBallAction.RegionCapture -> launchCapture()
             FloatingBallAction.CloseBall -> closeBall()
             FloatingBallAction.Settings -> openApp(RouteTarget.Settings)
@@ -397,13 +397,13 @@ class ChatFloatingWindows(
         }
     }
 
-    private fun launchCapture(fullSelection: Boolean = false) {
+    private fun launchCapture(sendImmediately: Boolean = false) {
         onCaptureStarted()
         runCatching {
             context.startActivity(
                 Intent(context, ScreenCaptureActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    .putExtra(EXTRA_FULL_SELECTION, fullSelection),
+                    .putExtra(EXTRA_SEND_IMMEDIATELY, sendImmediately),
             )
         }.onFailure {
             Log.e(TAG, "launch capture failed", it)

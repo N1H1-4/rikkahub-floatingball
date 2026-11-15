@@ -19,6 +19,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,13 +56,13 @@ import kotlin.uuid.Uuid
  * 这个 Activity 在拿到画面之前窗口是全透明的（不能画任何东西，否则会被截进画面里），
  * 拿到冻结帧之后才把画面铺满屏幕，交给 [ScreenshotEditor] 做框选、标注和输出。
  */
-/** true 时编辑器直接全选整张图 */
-const val EXTRA_FULL_SELECTION = "fullSelection"
+/** true 时跳过选区编辑器：截完直接发给新对话，悬浮面板带着图弹出来 */
+const val EXTRA_SEND_IMMEDIATELY = "sendImmediately"
 
 class ScreenCaptureActivity : ComponentActivity() {
     private val captureManager: ScreenCaptureManager by inject()
     private val floatingWindows: ChatFloatingWindows by inject()
-    private val fullSelection: Boolean by lazy { intent.getBooleanExtra(EXTRA_FULL_SELECTION, false) }
+    private val sendImmediately: Boolean by lazy { intent.getBooleanExtra(EXTRA_SEND_IMMEDIATELY, false) }
     private val filesManager: FilesManager by inject()
     private val floatingTracker: ChatFloatingTracker by inject()
 
@@ -102,24 +103,32 @@ class ScreenCaptureActivity : ComponentActivity() {
             RikkahubTheme {
                 val current = state
                 when (current) {
-                    is CaptureState.Ready -> ScreenshotEditor(
-                        bitmap = current.bitmap,
-                        onCancel = { finish() },
-                        onCopy = { bitmap ->
-                            val ok = ScreenshotExporter.copyToClipboard(this, bitmap)
-                            toast(if (ok) R.string.screenshot_copied else R.string.screenshot_copy_failed)
+                    is CaptureState.Ready -> if (sendImmediately) {
+                        // 全屏截取：不进选区编辑器，直接存成附件让悬浮面板带着图弹出来
+                        LaunchedEffect(current.bitmap) {
+                            sendToConversation(current.bitmap, Uuid.random())
                             finish()
-                        },
-                        onSave = { bitmap ->
-                            val ok = ScreenshotExporter.saveToGallery(this, bitmap)
-                            toast(if (ok) R.string.screenshot_saved else R.string.screenshot_save_failed)
-                            finish()
-                        },
-                        onSendNewChat = { bitmap ->
-                            scope.launch { sendToConversation(bitmap, Uuid.random()) }
-                        },
-                        onSendToChat = { bitmap -> pendingPick = bitmap },
-                    )
+                        }
+                    } else {
+                        ScreenshotEditor(
+                            bitmap = current.bitmap,
+                            onCancel = { finish() },
+                            onCopy = { bitmap ->
+                                val ok = ScreenshotExporter.copyToClipboard(this, bitmap)
+                                toast(if (ok) R.string.screenshot_copied else R.string.screenshot_copy_failed)
+                                finish()
+                            },
+                            onSave = { bitmap ->
+                                val ok = ScreenshotExporter.saveToGallery(this, bitmap)
+                                toast(if (ok) R.string.screenshot_saved else R.string.screenshot_save_failed)
+                                finish()
+                            },
+                            onSendNewChat = { bitmap ->
+                                scope.launch { sendToConversation(bitmap, Uuid.random()) }
+                            },
+                            onSendToChat = { bitmap -> pendingPick = bitmap },
+                        )
+                    }
 
                     is CaptureState.Failed -> CaptureFailed(
                         reason = current.reason,
