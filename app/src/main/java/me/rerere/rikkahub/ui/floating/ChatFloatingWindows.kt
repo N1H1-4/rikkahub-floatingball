@@ -352,6 +352,7 @@ class ChatFloatingWindows(
                     ringActions = ringActionsOf(displaySetting.value),
                     dockedRight = ballDockedRight.value,
                     onTap = ::onBallTap,
+                    onLongPress = ::openBallMenu,
                     onCloseMenu = ::closeBallMenu,
                     onRingAction = ::onRingAction,
                 )
@@ -364,68 +365,35 @@ class ChatFloatingWindows(
         animation(FxAnimations.scale())
         systemHost(context) { permission(FxPermissionStrategy.skip()) }
     }.also { control ->
-        // 长按由 FloatingX 自己识别：它在手势层会把长按吃掉，Compose 的 combinedClickable 收不到
+        // Compose 的长按会被 FloatingX 的手势层吃掉，这里同时挂它的回调；两边都开也只开一次菜单
         runCatching {
             control.addListener(
                 object : FxListener {
                     override fun onLongClick(control: FxControl, view: View) {
-                        openBallMenu()
+                        if (!ballMenuOpen.value) openBallMenu()
                     }
                 },
             )
-        }.onFailure { Log.w(TAG, "register ball long press failed", it) }
+        }.onFailure { Log.w(TAG, "register long press failed", it) }
     }
 
     /**
-     * 打开半圆菜单：球留在原地，只取消贴边半隐（否则半隐时菜单会被裁掉）。
-     * 窗口只会朝屏幕内侧变大，所以球看起来没动。
+     * 长按展开半圆菜单。UI 仍然画在球自己的窗口里（回到已验证可用的实现），
+     * 窗口变大时球会跟着偏移，这一点后续再单独处理。
      */
     private fun openBallMenu() {
-        val control = bubble ?: return
-        val density = context.resources.displayMetrics.density
-        val ballSize = dp(BALL_SIZE_DP * displaySetting.value.desktopPetSize)
-        // 记下球心原来的屏幕位置，菜单展开后要把它钉回这儿
-        val halfBody = (ballSize + dp(BALL_BODY_PADDING_DP)) / 2f
-        val centerX = control.position.x + halfBody
-        val centerY = control.position.y + halfBody
-
         ballMenuOpen.value = true
-        ballDockedRight.value = centerX > safeScreenWidth() / 2f
-        val canvasWidth = dp(BALL_RING_RADIUS_DP) + ballSize / 2f +
-            dp(BALL_RING_ITEM_DP) / 2f + dp(BALL_RING_PAD_DP)
-        val canvasHeight = dp(BALL_RING_RADIUS_DP) * 2f + dp(BALL_RING_ITEM_DP)
-        // 球在环形画布里的中心偏移（CenterEnd + 6dp 内边距）
-        val offsetX = canvasWidth - dp(BALL_BODY_PADDING_DP) / 2f - ballSize / 2f
-        val offsetY = canvasHeight / 2f
-        Log.i(TAG, "openBallMenu ball=$ballSize canvas=${canvasWidth}x$canvasHeight center=($centerX,$centerY)")
-
-        // 窗口尺寸是下一帧才变的，等一帧再校正位置
-        control.contentView?.post {
-            runCatching {
-                control.moveTo(centerX - offsetX, centerY - offsetY, animate = false)
-            }.onFailure { Log.w(TAG, "restore ball position failed", it) }
-        }
-        runCatching {
-            control.update {
-                // 半隐状态下菜单会被裁掉，先取消吸附
-                adsorb(FxAdsorb.none())
-                // 关键：关掉拖动。长按要按住好几百毫秒，手指的轻微移动会被当成拖动，
-                // 菜单弹出的同时窗口就被挪走了。改手势配置会触发 FxGestureDetector.cancel()，
-                // 连正在进行的拖动也会被中断。
-                gesture(FxGesture(click = true, longPress = true, drag = FxDrag.DISABLED))
-            }
-        }.onFailure { Log.w(TAG, "open ball menu failed", it) }
+        val control = bubble ?: return
+        ballDockedRight.value = control.position.x + dp(BALL_SIZE_DP / 2f) > safeScreenWidth() / 2f
+        runCatching { control.update { adsorb(FxAdsorb.none()) } }
+            .onFailure { Log.w(TAG, "open ball menu failed", it) }
     }
 
     private fun closeBallMenu() {
         ballMenuOpen.value = false
         bubble?.let { control ->
-            runCatching {
-                control.update {
-                    adsorb(adsorbFor(displaySetting.value))
-                    gesture(FxGesture(click = true, longPress = true, drag = FxDrag.IMMEDIATE))
-                }
-            }.onFailure { Log.w(TAG, "restore ball config failed", it) }
+            runCatching { control.update { adsorb(adsorbFor(displaySetting.value)) } }
+                .onFailure { Log.w(TAG, "restore ball adsorb failed", it) }
         }
     }
 
@@ -453,7 +421,7 @@ class ChatFloatingWindows(
     }
 
     private fun onRingAction(action: FloatingBallAction) {
-        ballMenuOpen.value = false
+        closeBallMenu()
         when (action) {
             FloatingBallAction.Auto -> onBallTap()
             FloatingBallAction.NewChat -> tracker.openConversation(Uuid.random())
