@@ -40,6 +40,7 @@ import me.rerere.rikkahub.data.datastore.DisplaySetting
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import com.petterp.floatingx.core.layout.FxHalfHide
 import com.petterp.floatingx.core.FxControl
+import com.petterp.floatingx.core.FxListener
 import com.petterp.floatingx.core.update
 import com.petterp.floatingx.core.animation.FxAnimations
 import com.petterp.floatingx.core.gesture.FxDrag
@@ -351,7 +352,6 @@ class ChatFloatingWindows(
                     ringActions = ringActionsOf(displaySetting.value),
                     dockedRight = ballDockedRight.value,
                     onTap = ::onBallTap,
-                    onLongPress = ::openBallMenu,
                     onCloseMenu = ::closeBallMenu,
                     onRingAction = ::onRingAction,
                 )
@@ -363,6 +363,17 @@ class ChatFloatingWindows(
         persist(FxSpStorage(context))
         animation(FxAnimations.scale())
         systemHost(context) { permission(FxPermissionStrategy.skip()) }
+    }.also { control ->
+        // 长按由 FloatingX 自己识别：它在手势层会把长按吃掉，Compose 的 combinedClickable 收不到
+        runCatching {
+            control.addListener(
+                object : FxListener {
+                    override fun onLongClick(control: FxControl, view: View) {
+                        openBallMenu()
+                    }
+                },
+            )
+        }.onFailure { Log.w(TAG, "register ball long press failed", it) }
     }
 
     /**

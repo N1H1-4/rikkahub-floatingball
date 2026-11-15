@@ -94,7 +94,6 @@ fun FloatingBall(
     /** 球贴在哪一侧：决定半圆朝哪边展开 */
     dockedRight: Boolean,
     onTap: () -> Unit,
-    onLongPress: () -> Unit,
     onCloseMenu: () -> Unit,
     onRingAction: (FloatingBallAction) -> Unit,
 ) {
@@ -114,7 +113,6 @@ fun FloatingBall(
                     size = size,
                     opacity = opacity,
                     onClick = onCloseMenu,
-                    onLongClick = null,
                 )
             },
             onRingAction = onRingAction,
@@ -132,7 +130,7 @@ fun FloatingBall(
                 modifier = Modifier
                     .size(size)
                     .clip(CircleShape)
-                    .combinedClickable(onClick = onTap, onLongClick = onLongPress),
+                    .clickable(onClick = onTap),
                 contentAlignment = Alignment.Center,
             ) {
                 BallFace(visuals = visuals, state = state, size = size)
@@ -157,7 +155,6 @@ private fun BallBody(
     size: androidx.compose.ui.unit.Dp,
     opacity: Float,
     onClick: () -> Unit,
-    onLongClick: (() -> Unit)?,
 ) {
     val colors = MaterialTheme.colorScheme
     Box(modifier = Modifier.padding(6.dp).alpha(opacity)) {
@@ -165,7 +162,7 @@ private fun BallBody(
             modifier = Modifier
                 .size(size)
                 .clip(CircleShape)
-                .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+                .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
             BallFace(visuals = visuals, state = state, size = size)
