@@ -288,10 +288,10 @@ fun ChatFloatingPanel(
                     state.pendingTools.isNotEmpty() ||
                     state.queuedCount > 0
                 if (hasMessages) {
+                    // 注意不要在这层加 verticalScroll：滚动容器里高度是无限定的，
+                    // 子项既拿不到 weight 也 fillMaxHeight 不了，消息框就不会跟着长高
                     Column(
-                        modifier = Modifier
-                            .weight(1f, fill = heightPinned)
-                            .verticalScroll(rememberScrollState()),
+                        modifier = Modifier.weight(1f, fill = heightPinned),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         if (state.preview.isNotEmpty()) {
@@ -299,6 +299,8 @@ fun ChatFloatingPanel(
                                 text = state.preview,
                                 isReasoning = state.previewIsReasoning,
                                 generating = state.generating,
+                                modifier = Modifier.weight(1f, fill = heightPinned),
+                                fillHeight = heightPinned,
                             )
                         }
                         state.pendingTools.forEach { tool ->
@@ -590,13 +592,21 @@ private fun PanelHeader(
 
 // 用不带应用功能的 MaterialMarkdown：应用里的 MarkdownBlock 依赖导航、Activity 等悬浮窗里没有的东西
 @Composable
-private fun MessagePreview(text: String, isReasoning: Boolean, generating: Boolean) {
+private fun MessagePreview(
+    text: String,
+    isReasoning: Boolean,
+    generating: Boolean,
+    modifier: Modifier = Modifier,
+    /** true 时撑满外层给的高度（面板被手动拉高），false 时用固定上限 */
+    fillHeight: Boolean = false,
+) {
     val scrollState = rememberScrollState()
     // 生成中跟随最新内容。Markdown 在后台解析，内容变高晚于文本变化，按可滚动距离跟随
     LaunchedEffect(generating) {
         if (generating) snapshotFlow { scrollState.maxValue }.collect { scrollState.scrollTo(it) }
     }
     Surface(
+        modifier = modifier,
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
         contentColor = if (isReasoning) {
@@ -613,7 +623,9 @@ private fun MessagePreview(text: String, isReasoning: Boolean, generating: Boole
             renderMath = true,
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 200.dp)
+                .then(
+                    if (fillHeight) Modifier.fillMaxHeight() else Modifier.heightIn(max = 200.dp),
+                )
                 .verticalScroll(scrollState)
                 .padding(12.dp),
         )
