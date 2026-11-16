@@ -279,11 +279,15 @@ fun ChatFloatingPanel(
                     onCollapse = onCollapse,
                     onDismiss = onDismiss,
                 )
-                // 多个审批、横屏或大字体时放不下，中间这段滚动，标题和输入栏始终可见
-                if (state.preview.isNotEmpty() || state.pendingTools.isNotEmpty() || state.queuedCount > 0) {
+                // 多个审批、横屏或大字体时放不下，中间这段滚动，标题和输入栏始终可见。
+                // 手动拉高过窗口时（heightPinned）让它吃掉剩余高度，输入栏才会贴到底部
+                val hasMessages = state.preview.isNotEmpty() ||
+                    state.pendingTools.isNotEmpty() ||
+                    state.queuedCount > 0
+                if (hasMessages) {
                     Column(
                         modifier = Modifier
-                            .weight(1f, fill = false)
+                            .weight(1f, fill = heightPinned)
                             .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
@@ -305,6 +309,9 @@ fun ChatFloatingPanel(
                             QueueRow(count = state.queuedCount, paused = state.queuePaused, onResume = onResumeQueue)
                         }
                     }
+                }
+                if (!hasMessages && heightPinned) {
+                    Spacer(Modifier.weight(1f))
                 }
                 ComposerToolbar(
                     conversationId = state.conversationId,
@@ -336,7 +343,6 @@ fun ChatFloatingPanel(
                     requestFocus = phase == PanelPhase.Idle,
                     leadingControls = {
                         QuickMessageToggle(
-                            conversationId = state.conversationId,
                             expanded = quickOpen,
                             onToggle = {
                                 quickOpen = !quickOpen
@@ -382,7 +388,7 @@ fun ChatFloatingPanel(
                     .align(Alignment.BottomStart)
                     .padding(start = ArcInsetStart, bottom = ArcInsetBottom),
                 onBegin = { x, y -> onResizeBegin(x, y, true) },
-                onMove = { x, y -> onResizeMove(x, y, false) },
+                onMove = { x, y -> onResizeMove(x, y, canResizeHeight) },
                 onEnd = onResizeEnd,
                 onPressedChange = { leftArcPressed = it },
             )
@@ -803,12 +809,22 @@ private fun ComposerToolbar(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    items(quickMessages, key = { it.id.toString() }) { quickMessage ->
-                        ComposerChip(
-                            label = quickMessage.title.ifBlank { quickMessage.content },
-                            selected = false,
-                            onClick = { onApplyQuickMessage(quickMessage.content) },
-                        )
+                    if (quickMessages.isEmpty()) {
+                        item {
+                            ComposerChip(
+                                label = "没有快捷消息",
+                                selected = false,
+                                onClick = {},
+                            )
+                        }
+                    } else {
+                        items(quickMessages, key = { it.id.toString() }) { quickMessage ->
+                            ComposerChip(
+                                label = quickMessage.title.ifBlank { quickMessage.content },
+                                selected = false,
+                                onClick = { onApplyQuickMessage(quickMessage.content) },
+                            )
+                        }
                     }
                 }
             } else {
@@ -946,16 +962,9 @@ private fun ComposerChip(label: String, selected: Boolean, onClick: () -> Unit) 
     }
 }
 
-/** 输入框左边的闪电：展开/收起快捷消息。没有快捷消息时不显示 */
+/** 输入框左边的闪电：展开/收起快捷消息 */
 @Composable
-private fun QuickMessageToggle(conversationId: Uuid, expanded: Boolean, onToggle: () -> Unit) {
-    val chatService = koinInject<ChatService>()
-    val settingsStore = koinInject<SettingsStore>()
-    val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
-    val conversation by chatService.getConversationFlow(conversationId).collectAsStateWithLifecycle()
-    val quickMessages = settings.getQuickMessagesOfAssistant(settings.getAssistantOf(conversation))
-    if (quickMessages.isEmpty()) return
-
+private fun QuickMessageToggle(expanded: Boolean, onToggle: () -> Unit) {
     ComposerIconButton(
         label = "快捷消息",
         selected = expanded,
