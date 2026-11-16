@@ -382,6 +382,7 @@ class ChatFloatingWindows(
      * 窗口变大时球会跟着偏移，这一点后续再单独处理。
      */
     private fun openBallMenu() {
+        // 先把菜单打开，后面任何一步失败都不影响"长按有反应"
         ballMenuOpen.value = true
         val control = bubble ?: return
         ballDockedRight.value = control.position.x + dp(BALL_SIZE_DP / 2f) > safeScreenWidth() / 2f
