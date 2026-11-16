@@ -269,7 +269,10 @@ fun ChatFloatingPanel(
             shadowElevation = 8.dp,
         ) {
             Column(
-                modifier = Modifier.padding(16.dp),
+                // 高度被手动指定后要先把这一列撑满卡片，下面的 weight 才有确定的高度可以分
+                modifier = Modifier
+                    .then(if (heightPinned) Modifier.fillMaxHeight() else Modifier)
+                    .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 PanelDragHandle(onMove = onMoveWindow)
