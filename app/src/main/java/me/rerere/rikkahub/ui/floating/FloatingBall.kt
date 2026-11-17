@@ -4,6 +4,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -255,12 +257,25 @@ private fun RingMenu(
 
 @Composable
 private fun BallFace(visuals: DesktopPetVisuals, state: FloatingChatUiState?, size: androidx.compose.ui.unit.Dp) {
-    // 思考中（正在生成）不管用户选了什么形象，都切成默认兔子的思考动画
-    if (state?.generating == true) {
-        AnimatedLogo(size = size, morphing = true)
-        return
-    }
+    val generating = state?.generating == true
     when (val avatar = visuals.avatar) {
+        // 默认形象：整颗球就是会变形的兔子
+        Avatar.Dummy -> AnimatedLogo(size = size, morphing = generating)
+        // 自定义形象：保持不动，只在外面套一圈旋转的进度环
+        else -> {
+            if (generating) {
+                ThinkingAvatar(size = size) { AvatarImage(avatar = avatar, size = size) }
+            } else {
+                AvatarImage(avatar = avatar, size = size)
+            }
+        }
+    }
+}
+
+/** 用户自定义形象（图片 / Emoji）本身，不含动画 */
+@Composable
+private fun AvatarImage(avatar: Avatar, size: androidx.compose.ui.unit.Dp) {
+    when (avatar) {
         is Avatar.Image -> AsyncImage(
             model = avatar.url,
             contentDescription = null,
@@ -280,14 +295,32 @@ private fun BallFace(visuals: DesktopPetVisuals, state: FloatingChatUiState?, si
             )
         }
 
-        Avatar.Dummy -> AnimatedLogo(size = size, morphing = state?.generating == true)
+        Avatar.Dummy -> Unit
     }
 }
 
-/** 默认形象：会变形的 App 兔子 logo，生成中变形 + 自转 */
+/**
+ * 思考中：把兔子那套"形状变形 + 自转"的动画套在用户自己的形象上，
+ * 中间仍然是他选的形象，只是轮廓在变形。
+ */
 @Composable
-private fun AnimatedLogo(size: androidx.compose.ui.unit.Dp, morphing: Boolean) {
-    val logoLayers = rememberAppLogoLayers()
+private fun ThinkingAvatar(size: androidx.compose.ui.unit.Dp, content: @Composable () -> Unit) {
+    val shape = rememberMorphingShape(morphing = true)
+    Box(
+        modifier = Modifier
+            .size(size)
+            // 凹多边形轮廓不能用 elevation 阴影，会每帧三角剖分卡住渲染线程
+            .dropShadow(shape, Shadow(radius = 6.dp, offset = DpOffset(0.dp, 2.dp), alpha = 0.3f))
+            .clip(shape),
+        contentAlignment = Alignment.Center,
+    ) {
+        content()
+    }
+}
+
+/** 兔子的"形状变形 + 自转"循环，抽出来给自定义形象复用 */
+@Composable
+private fun rememberMorphingShape(morphing: Boolean): androidx.compose.ui.graphics.Shape {
     val shapePosition = remember { Animatable(0f) }
     val spin = remember { Animatable(0f) }
     // 球收起时（窗口隐藏）没必要继续跑动画
@@ -313,8 +346,14 @@ private fun AnimatedLogo(size: androidx.compose.ui.unit.Dp, morphing: Boolean) {
             morph.join()
         }
     }
+    return logoMorphShape(shapePosition.value, extraRotation = spin.value)
+}
 
-    val logoShape = logoMorphShape(shapePosition.value, extraRotation = spin.value)
+/** 默认形象：会变形的 App 兔子 logo，生成中变形 + 自转 */
+@Composable
+private fun AnimatedLogo(size: androidx.compose.ui.unit.Dp, morphing: Boolean) {
+    val logoLayers = rememberAppLogoLayers()
+    val logoShape = rememberMorphingShape(morphing)
     Box(
         modifier = Modifier
             .size(size)
