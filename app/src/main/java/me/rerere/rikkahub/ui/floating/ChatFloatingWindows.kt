@@ -404,11 +404,15 @@ class ChatFloatingWindows(
         val centerY = control.position.y + halfBody
         ballDockedRight.value = centerX > safeScreenWidth() / 2f
 
-        val ring = ringControl ?: runCatching { installRing() }
-            .onFailure { Log.e(TAG, "installRing failed", it) }
-            .getOrNull()
-            ?: return
-            .also { ringControl = it }
+        // 同样注意：`?: return.also { }` 里 return 后面的 also 不可达，必须写成显式块
+        val ring = ringControl ?: run {
+            val installed = runCatching { installRing() }
+                .onFailure { Log.e(TAG, "installRing failed", it) }
+                .getOrNull()
+                ?: return
+            ringControl = installed
+            installed
+        }
 
         // 球先藏起来，菜单窗口画在同一個位置
         control.hide()
