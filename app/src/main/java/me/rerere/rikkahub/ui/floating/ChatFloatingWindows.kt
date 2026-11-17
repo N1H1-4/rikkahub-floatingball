@@ -85,6 +85,7 @@ private const val TAG = "ChatFloatingWindows"
 private const val BUBBLE_TAG = "chat_floating_bubble"
 private const val PANEL_TAG = "chat_floating_panel"
 private const val LIST_TAG = "chat_floating_list"
+private const val RING_TAG = "chat_floating_ring"
 private const val PANEL_TOP_OFFSET_DP = 8f
 private const val PANEL_MAX_WIDTH_DP = 560f
 private const val PANEL_MIN_WIDTH_DP = 320f
@@ -121,6 +122,8 @@ class ChatFloatingWindows(
     private var panel: FxControl? = null
     // 悬浮球旁边弹出的列表（历史会话 / 切换助手）
     private var listControl: FxControl? = null
+    // 长按菜单是独立窗口：球自己的窗口尺寸不变，位置就不会被带着跑
+    private var ringControl: FxControl? = null
     private val listMode = mutableStateOf<FloatingListMode?>(null)
 
     // 合并后的球：形象跟着显示设置走，窗口小且常驻
@@ -261,11 +264,16 @@ class ChatFloatingWindows(
         // 合并后的球：开着"桌面宠物"开关就常驻；没有开关时只在有会话可跟时出现
         val ballVisible = !captureInProgress &&
             (displaySetting.value.enableDesktopPet || expanded != null)
-        val ball = bubble ?: runCatching { installBubble() }
-            .onFailure { Log.e(TAG, "install floating ball failed", it) }
-            .getOrNull()
-            ?: return
-            .also { bubble = it }
+        // 注意：bubble ?: ... ?: return.also { } 这种写法里 return 后面的 also 是不可达的，
+        // 之前就是这么写的，导致 bubble 永远是 null、每次 render 都重新建窗口。
+        val ball = bubble ?: run {
+            val installed = runCatching { installBubble() }
+                .onFailure { Log.e(TAG, "install floating ball failed", it) }
+                .getOrNull()
+                ?: return
+            bubble = installed
+            installed
+        }
 
         if (expanded == true) {
             ball.hide()
@@ -348,7 +356,7 @@ class ChatFloatingWindows(
                 FloatingBall(
                     visuals = ballVisuals.value,
                     state = state,
-                    menuOpen = ballMenuOpen.value,
+                    menuOpen = false,
                     ringActions = ringActionsOf(displaySetting.value),
                     dockedRight = ballDockedRight.value,
                     onTap = ::onBallTap,
@@ -381,21 +389,72 @@ class ChatFloatingWindows(
      * 长按展开半圆菜单。UI 仍然画在球自己的窗口里（回到已验证可用的实现），
      * 窗口变大时球会跟着偏移，这一点后续再单独处理。
      */
+    /**
+     * 长按菜单。菜单画在**独立窗口**里：球自己的窗口尺寸完全不变，所以不会跟着位移。
+     *
+     * 之前把菜单画在球窗口里，窗口一变大，WindowManager 让内容朝一个方向长，
+     * 球就跟着跑了；FloatingX 缓存的位置又不随尺寸更新，怎么补都补不回来。
+     */
     private fun openBallMenu() {
-        // 先把菜单打开，后面任何一步失败都不影响"长按有反应"
-        ballMenuOpen.value = true
         val control = bubble ?: return
-        ballDockedRight.value = control.position.x + dp(BALL_SIZE_DP / 2f) > safeScreenWidth() / 2f
-        runCatching { control.update { adsorb(FxAdsorb.none()) } }
-            .onFailure { Log.w(TAG, "open ball menu failed", it) }
+        ballMenuOpen.value = true
+        val ballSize = dp(BALL_SIZE_DP * displaySetting.value.desktopPetSize)
+        val halfBody = (ballSize + dp(BALL_BODY_PADDING_DP)) / 2f
+        val centerX = control.position.x + halfBody
+        val centerY = control.position.y + halfBody
+        ballDockedRight.value = centerX > safeScreenWidth() / 2f
+
+        val ring = ringControl ?: runCatching { installRing() }
+            .onFailure { Log.e(TAG, "installRing failed", it) }
+            .getOrNull()
+            ?: return
+            .also { ringControl = it }
+
+        // 球先藏起来，菜单窗口画在同一個位置
+        control.hide()
+        ring.show()
+
+        val canvasWidth = dp(BALL_RING_RADIUS_DP) + ballSize / 2f +
+            dp(BALL_RING_ITEM_DP) / 2f + dp(BALL_RING_PAD_DP)
+        val canvasHeight = dp(BALL_RING_RADIUS_DP) * 2f + dp(BALL_RING_ITEM_DP)
+        // 球在画布里的中心偏移（CenterEnd + 半个内边距）
+        val offsetX = canvasWidth - dp(BALL_BODY_PADDING_DP) / 2f - ballSize / 2f
+        val offsetY = canvasHeight / 2f
+        val left = centerX - offsetX
+        val top = centerY - offsetY
+        runCatching { ring.moveTo(left, top, animate = false) }
+            .onFailure { Log.w(TAG, "place ring menu failed", it) }
     }
 
     private fun closeBallMenu() {
         ballMenuOpen.value = false
-        bubble?.let { control ->
-            runCatching { control.update { adsorb(adsorbFor(displaySetting.value)) } }
-                .onFailure { Log.w(TAG, "restore ball adsorb failed", it) }
+        ringControl?.hide()
+        // 菜单收起后把球放回来（render 会按当前状态决定显示与否）
+        render(tracker.window.value?.expanded)
+    }
+
+    private fun installRing(): FxControl = FloatingX.install(RING_TAG) {
+        compose {
+            WindowContentOrNull { state ->
+                FloatingBall(
+                    visuals = ballVisuals.value,
+                    state = state,
+                    menuOpen = true,
+                    ringActions = ringActionsOf(displaySetting.value),
+                    dockedRight = ballDockedRight.value,
+                    onTap = {},
+                    onLongPress = {},
+                    onCloseMenu = ::closeBallMenu,
+                    onRingAction = ::onRingAction,
+                )
+            }
         }
+        // TOP_START：lp.x / lp.y 就是内容的绝对坐标，moveTo 不会被锚点换算绕晕
+        anchor(FxGravity.TOP_START)
+        margin(left = dp(8f), right = dp(8f))
+        adsorb(FxAdsorb.none())
+        animation(FxAnimations.fade())
+        systemHost(context) { permission(FxPermissionStrategy.skip()) }
     }
 
     private fun adsorbFor(display: DisplaySetting): FxAdsorb = when {
