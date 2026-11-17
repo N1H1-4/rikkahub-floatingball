@@ -827,7 +827,7 @@ private fun ComposerToolbar(
                     if (quickMessages.isEmpty()) {
                         item {
                             ComposerChip(
-                                label = "没有快捷消息",
+                                label = stringResource(R.string.floating_chat_quick_empty),
                                 selected = false,
                                 onClick = {},
                             )
@@ -981,7 +981,7 @@ private fun ComposerChip(label: String, selected: Boolean, onClick: () -> Unit) 
 @Composable
 private fun QuickMessageToggle(expanded: Boolean, onToggle: () -> Unit) {
     ComposerIconButton(
-        label = "快捷消息",
+        label = stringResource(R.string.floating_chat_quick_messages),
         selected = expanded,
         onClick = onToggle,
     ) {

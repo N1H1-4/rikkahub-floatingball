@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
@@ -242,7 +243,7 @@ private fun RingMenu(
                 ) {
                     Icon(
                         imageVector = action.icon,
-                        contentDescription = action.label,
+                        contentDescription = stringResource(action.labelRes),
                         modifier = Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurface,
                     )
@@ -254,6 +255,11 @@ private fun RingMenu(
 
 @Composable
 private fun BallFace(visuals: DesktopPetVisuals, state: FloatingChatUiState?, size: androidx.compose.ui.unit.Dp) {
+    // 思考中（正在生成）不管用户选了什么形象，都切成默认兔子的思考动画
+    if (state?.generating == true) {
+        AnimatedLogo(size = size, morphing = true)
+        return
+    }
     when (val avatar = visuals.avatar) {
         is Avatar.Image -> AsyncImage(
             model = avatar.url,

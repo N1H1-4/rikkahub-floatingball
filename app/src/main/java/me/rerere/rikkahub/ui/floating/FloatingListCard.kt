@@ -25,11 +25,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import org.koin.compose.koinInject
@@ -64,13 +66,15 @@ fun FloatingListCard(
             val conversations by conversationRepository
                 .getConversationsOfAssistant(settings.assistantId)
                 .collectAsStateWithLifecycle(initialValue = emptyList())
-            ListSurface(title = "历史会话", onDismiss = onDismiss) {
+            // LazyListScope 的 lambda 不是 @Composable，stringResource 要提到外面算好
+            val emptyText = stringResource(R.string.floating_list_empty)
+            ListSurface(title = stringResource(R.string.floating_list_history), onDismiss = onDismiss) {
                 if (conversations.isEmpty()) {
-                    emptyHint("这个助手下还没有对话")
+                    emptyHint(emptyText)
                 } else {
                     items(conversations, key = { it.id.toString() }) { conversation ->
                         ListRow(
-                            title = conversation.title.ifBlank { "新对话" },
+                            title = conversation.title.ifBlank { stringResource(R.string.floating_list_new_chat) },
                             subtitle = TimeFormat.format(Date(conversation.updateAt.toEpochMilli())),
                             onClick = { onPickConversation(conversation.id) },
                         )
@@ -81,11 +85,11 @@ fun FloatingListCard(
 
         FloatingListMode.Assistants -> {
             val currentId = settings.assistantId
-            ListSurface(title = "切换助手", onDismiss = onDismiss) {
+            ListSurface(title = stringResource(R.string.floating_list_assistants), onDismiss = onDismiss) {
                 items(settings.assistants, key = { it.id.toString() }) { assistant ->
                     ListRow(
-                        title = assistant.name.ifBlank { "未命名助手" },
-                        subtitle = if (assistant.id == currentId) "当前使用的助手" else "",
+                        title = assistant.name.ifBlank { stringResource(R.string.floating_list_untitled) },
+                        subtitle = if (assistant.id == currentId) stringResource(R.string.floating_list_current) else "",
                         selected = assistant.id == currentId,
                         onClick = { onPickAssistant(assistant.id) },
                     )
@@ -128,7 +132,7 @@ private fun ListSurface(
                         .clickable(onClick = onDismiss),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(HugeIcons.Cancel01, contentDescription = "关闭", modifier = Modifier.size(18.dp))
+                    Icon(HugeIcons.Cancel01, contentDescription = stringResource(R.string.floating_ball_close), modifier = Modifier.size(18.dp))
                 }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))

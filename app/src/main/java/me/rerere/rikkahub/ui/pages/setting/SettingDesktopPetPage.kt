@@ -221,22 +221,23 @@ fun SettingDesktopPetPage(vm: SettingVM = koinViewModel()) {
             }
 
             item {
-                CardGroup(title = { Text("快捷操作") }) {
+                CardGroup(title = { Text(stringResource(R.string.floating_ball_quick_group)) }) {
                     item(
                         onClick = { showTapDialog = true },
-                        headlineContent = { Text("点击悬浮球") },
-                        supportingContent = { Text(tapAction.label) },
+                        headlineContent = { Text(stringResource(R.string.floating_ball_tap_action)) },
+                        supportingContent = { Text(stringResource(tapAction.labelRes)) },
                         trailingContent = { Icon(HugeIcons.ArrowRight01, contentDescription = null) },
                     )
                     item(
                         onClick = { showRingDialog = true },
-                        headlineContent = { Text("环形菜单") },
+                        headlineContent = { Text(stringResource(R.string.floating_ball_ring_action)) },
                         supportingContent = {
+                            val labels = ringActions.map { stringResource(it.labelRes) }
                             Text(
-                                if (ringActions.isEmpty()) {
-                                    "尚未选择（长按悬浮球只会显示关闭按钮）"
+                                if (labels.isEmpty()) {
+                                    stringResource(R.string.floating_ball_ring_action_empty)
                                 } else {
-                                    ringActions.joinToString(" / ") { it.label }
+                                    labels.joinToString(" / ")
                                 }
                             )
                         },
@@ -276,7 +277,7 @@ private fun TapActionDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("点击悬浮球时") },
+        title = { Text(stringResource(R.string.floating_ball_tap_dialog_title)) },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 (listOf(FloatingBallAction.Auto) + FloatingBallAction.ringCandidates).forEach { action ->
@@ -291,13 +292,13 @@ private fun TapActionDialog(
                         Spacer(Modifier.size(8.dp))
                         Icon(action.icon, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.size(10.dp))
-                        Text(action.label)
+                        Text(stringResource(action.labelRes))
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("关闭") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.floating_ball_close)) }
         },
     )
 }
@@ -311,7 +312,7 @@ private fun RingActionDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("环形菜单（最多 ${FloatingBallAction.RingLimit} 个）") },
+        title = { Text(stringResource(R.string.floating_ball_ring_dialog_title, FloatingBallAction.RingLimit)) },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 FloatingBallAction.ringCandidates.forEach { action ->
@@ -330,13 +331,13 @@ private fun RingActionDialog(
                         Spacer(Modifier.size(8.dp))
                         Icon(action.icon, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.size(10.dp))
-                        Text(action.label)
+                        Text(stringResource(action.labelRes))
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("完成") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.floating_ball_done)) }
         },
     )
 }
