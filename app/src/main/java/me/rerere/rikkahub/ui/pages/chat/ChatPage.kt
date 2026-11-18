@@ -76,6 +76,10 @@ import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.LeftToRightListBullet
 import me.rerere.hugeicons.stroke.Menu03
 import me.rerere.hugeicons.stroke.MessageAdd01
+import android.content.Intent
+import me.rerere.rikkahub.service.ChatFloatingTracker
+import androidx.core.net.toUri
+import me.rerere.hugeicons.stroke.PictureInPicture
 import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.Share04
 import me.rerere.rikkahub.R
@@ -325,6 +329,8 @@ private fun ChatPageContent(
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
+    val floatingTracker: ChatFloatingTracker = koinInject()
+    val appContext = LocalContext.current
     val workspaceRepository: WorkspaceRepository = koinInject()
     val sessionActivity by vm.sessionActivity.collectAsStateWithLifecycle()
 
@@ -671,6 +677,8 @@ private fun TopBar(
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
+    val floatingTracker: ChatFloatingTracker = koinInject()
+    val appContext = LocalContext.current
     val titleState = useEditState<String> {
         onUpdateTitle(it)
     }
@@ -736,6 +744,24 @@ private fun TopBar(
                 showBackground = showCapsuleBackground,
                 modifier = Modifier.padding(start = 4.dp, end = 8.dp),
             ) {
+                // 用当前会话直接打开悬浮窗
+                IconButton(
+                    onClick = {
+                        val context = appContext
+                        if (android.provider.Settings.canDrawOverlays(context)) {
+                            floatingTracker.openConversation(conversation.id)
+                        } else {
+                            context.startActivity(
+                                Intent(
+                                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    "package:${context.packageName}".toUri(),
+                                ),
+                            )
+                        }
+                    }
+                ) {
+                    Icon(HugeIcons.PictureInPicture, stringResource(R.string.floating_ball_open_panel))
+                }
                 IconButton(
                     onClick = {
                         onNewChat()

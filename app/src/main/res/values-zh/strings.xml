@@ -441,6 +441,7 @@
   <string name="screenshot_pick_conversation_empty">还没有对话</string>
   <string name="screenshot_need_overlay_permission">需要悬浮窗权限才能打开悬浮对话</string>
   <!-- 悬浮球 -->
+  <string name="floating_ball_open_panel">打开悬浮窗</string>
   <string name="floating_action_auto">自动判断</string>
   <string name="floating_action_new_chat">悬浮窗新对话</string>
   <string name="floating_action_history">历史会话</string>

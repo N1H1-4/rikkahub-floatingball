@@ -442,6 +442,7 @@
   <string name="screenshot_pick_conversation_empty">No conversations yet</string>
   <string name="screenshot_need_overlay_permission">Grant overlay permission to open the floating chat</string>
   <!-- 悬浮球 -->
+  <string name="floating_ball_open_panel">Open floating window</string>
   <string name="floating_action_auto">Auto (by state)</string>
   <string name="floating_action_new_chat">New floating chat</string>
   <string name="floating_action_history">History</string>
