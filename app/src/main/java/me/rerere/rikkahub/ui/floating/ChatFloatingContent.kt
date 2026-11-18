@@ -164,6 +164,9 @@ private const val SPIN_DURATION_MILLIS = 4666
 enum class PanelPhase { Idle, Sending, Streaming, Finished }
 
 /** 悬浮窗展示的会话状态 */
+/** 悬浮窗里展示的一条历史消息 */
+data class FloatingMessage(val isUser: Boolean, val text: String)
+
 data class FloatingChatUiState(
     val conversationId: Uuid,
     val title: String,
@@ -174,6 +177,8 @@ data class FloatingChatUiState(
     val phase: GenerationPhase,
     /** 本轮是否已经有回复 */
     val hasReply: Boolean,
+    /** 已有的历史消息，用来在悬浮窗里显示当前会话的内容 */
+    val history: List<FloatingMessage>,
     /** 本轮回复的正文（Markdown），还没写正文时是思考内容 */
     val preview: String,
     val previewIsReasoning: Boolean,
@@ -283,24 +288,32 @@ fun ChatFloatingPanel(
                     onDismiss = onDismiss,
                 )
                 // 多个审批、横屏或大字体时放不下，中间这段滚动，标题和输入栏始终可见。
+                // 中间这块是阅读区：已有历史 + 本轮流式预览 + 待审批/排队提示。
                 // 手动拉高过窗口时（heightPinned）让它吃掉剩余高度，输入栏才会贴到底部
-                val hasMessages = state.preview.isNotEmpty() ||
+                val hasMessages = state.history.isNotEmpty() ||
+                    state.preview.isNotEmpty() ||
                     state.pendingTools.isNotEmpty() ||
                     state.queuedCount > 0
                 if (hasMessages) {
-                    // 注意不要在这层加 verticalScroll：滚动容器里高度是无限定的，
-                    // 子项既拿不到 weight 也 fillMaxHeight 不了，消息框就不会跟着长高
+                    val historyScroll = rememberScrollState()
+                    // 打开时落到最新一条；生成中跟着内容走
+                    LaunchedEffect(state.conversationId) { historyScroll.scrollTo(historyScroll.maxValue) }
+                    LaunchedEffect(state.preview.length, state.generating) {
+                        if (state.generating) historyScroll.scrollTo(historyScroll.maxValue)
+                    }
                     Column(
-                        modifier = Modifier.weight(1f, fill = heightPinned),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier
+                            .weight(1f, fill = heightPinned)
+                            .verticalScroll(historyScroll),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
+                        state.history.forEach { message -> FloatingMessageBubble(message) }
                         if (state.preview.isNotEmpty()) {
                             MessagePreview(
                                 text = state.preview,
                                 isReasoning = state.previewIsReasoning,
                                 generating = state.generating,
-                                modifier = Modifier.weight(1f, fill = heightPinned),
-                                fillHeight = heightPinned,
+                                fillHeight = false,
                             )
                         }
                         state.pendingTools.forEach { tool ->
@@ -314,8 +327,7 @@ fun ChatFloatingPanel(
                             QueueRow(count = state.queuedCount, paused = state.queuePaused, onResume = onResumeQueue)
                         }
                     }
-                }
-                if (!hasMessages && heightPinned) {
+                } else if (heightPinned) {
                     Spacer(Modifier.weight(1f))
                 }
                 ComposerToolbar(
@@ -448,6 +460,41 @@ private fun ResizeHandle(
                 }
             },
     )
+}
+
+/** 悬浮窗里的一条历史消息：用户靠右、助手靠左，助手内容按 Markdown 渲染 */
+@Composable
+private fun FloatingMessageBubble(message: FloatingMessage) {
+    val isUser = message.isUser
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+    ) {
+        Surface(
+            shape = MaterialTheme.shapes.large,
+            color = if (isUser) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLowest
+            },
+            modifier = if (isUser) Modifier.widthIn(max = 280.dp) else Modifier.fillMaxWidth(),
+        ) {
+            if (isUser) {
+                Text(
+                    text = message.text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                )
+            } else {
+                MaterialMarkdown(
+                    content = message.text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    renderMath = true,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                )
+            }
+        }
+    }
 }
 
 /**

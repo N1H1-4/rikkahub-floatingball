@@ -68,6 +68,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.conversationIntent
@@ -908,6 +909,22 @@ internal fun buildFloatingChatUiState(
     val reply = replyMessageId?.let { id ->
         conversation.messageNodes.firstNotNullOfOrNull { node -> node.messages.firstOrNull { it.id == id } }
     }
+    // 已有对话内容：只取文本，最多 40 条，够看上下文又不至于把窗口撑爆
+    val history = conversation.messageNodes
+        .mapNotNull { node -> runCatching { node.currentMessage }.getOrNull() }
+        .mapNotNull { message ->
+            val body = message.parts
+                .filterIsInstance<UIMessagePart.Text>()
+                .joinToString("\n") { part -> part.text }
+                .trim()
+            if (body.isEmpty()) {
+                null
+            } else {
+                FloatingMessage(isUser = message.role == MessageRole.USER, text = body)
+            }
+        }
+        .takeLast(40)
+
     val text = reply?.parts?.filterIsInstance<UIMessagePart.Text>()?.lastOrNull()?.text?.trim().orEmpty()
     val reasoning = reply?.parts?.filterIsInstance<UIMessagePart.Reasoning>()?.lastOrNull()?.reasoning?.trim().orEmpty()
     return FloatingChatUiState(
@@ -917,6 +934,7 @@ internal fun buildFloatingChatUiState(
         processingStatus = processingStatus,
         phase = reply?.generationPhase() ?: GenerationPhase.Waiting,
         hasReply = reply != null,
+        history = history,
         // 还没写正文时显示思考内容。按 Markdown 渲染，不能截断，切在代码块中间后面会整段错乱
         preview = text.ifEmpty { reasoning },
         previewIsReasoning = text.isEmpty(),
