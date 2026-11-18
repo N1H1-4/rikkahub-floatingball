@@ -126,6 +126,8 @@ class ChatFloatingWindows(
     private var listControl: FxControl? = null
     // 长按菜单是独立窗口：球自己的窗口尺寸不变，位置就不会被带着跑
     private var ringControl: FxControl? = null
+    // 每次打开菜单自增，让菜单重放入场动画
+    private val ringOpenTick = mutableStateOf(0)
     private val listMode = mutableStateOf<FloatingListMode?>(null)
 
     // 合并后的球：形象跟着显示设置走，窗口小且常驻
@@ -416,15 +418,20 @@ class ChatFloatingWindows(
             installed
         }
 
-        // 球先藏起来，菜单窗口画在同一個位置
+        // 球先藏起来，菜单窗口画在同一个位置
         control.hide()
+        ringOpenTick.value += 1
         ring.show()
 
         val canvasWidth = dp(BALL_RING_RADIUS_DP) + ballSize / 2f +
             dp(BALL_RING_ITEM_DP) / 2f + dp(BALL_RING_PAD_DP)
         val canvasHeight = dp(BALL_RING_RADIUS_DP) * 2f + dp(BALL_RING_ITEM_DP)
-        // 球在画布里的中心偏移（CenterEnd + 半个内边距）
-        val offsetX = canvasWidth - dp(BALL_BODY_PADDING_DP) / 2f - ballSize / 2f
+        // 球在画布里的中心偏移：贴右边时球在画布右端（CenterEnd），贴左边时在左端（CenterStart）
+        val offsetX = if (ballDockedRight.value) {
+            canvasWidth - dp(BALL_BODY_PADDING_DP) / 2f - ballSize / 2f
+        } else {
+            dp(BALL_BODY_PADDING_DP) / 2f + ballSize / 2f
+        }
         val offsetY = canvasHeight / 2f
         val left = centerX - offsetX
         val top = centerY - offsetY
@@ -448,6 +455,7 @@ class ChatFloatingWindows(
                     menuOpen = true,
                     ringActions = ringActionsOf(displaySetting.value),
                     dockedRight = ballDockedRight.value,
+                    openTick = ringOpenTick.value,
                     onTap = {},
                     onLongPress = {},
                     onCloseMenu = ::closeBallMenu,

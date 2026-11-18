@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.shadow.Shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -96,6 +97,8 @@ fun FloatingBall(
     ringActions: List<FloatingBallAction>,
     /** 球贴在哪一侧：决定半圆朝哪边展开 */
     dockedRight: Boolean,
+    /** 每次打开菜单自增，用来重放入场动画（窗口是复用的，不能靠首次组合触发） */
+    openTick: Int = 0,
     onTap: () -> Unit,
     onLongPress: () -> Unit,
     onCloseMenu: () -> Unit,
@@ -109,6 +112,7 @@ fun FloatingBall(
         RingMenu(
             ringActions = ringActions,
             dockedRight = dockedRight,
+            openTick = openTick,
             ballSize = size,
             center = {
                 BallBody(
@@ -192,12 +196,23 @@ private fun BallBody(
 private fun RingMenu(
     ringActions: List<FloatingBallAction>,
     dockedRight: Boolean,
+    openTick: Int,
     ballSize: androidx.compose.ui.unit.Dp,
     center: @Composable () -> Unit,
     onRingAction: (FloatingBallAction) -> Unit,
     onCloseMenu: () -> Unit,
 ) {
     val count = ringActions.size.coerceAtMost(FloatingBallAction.RingLimit)
+    // 打开时从球的位置"弹开"：一个总的进度值，每个图标按索引错峰
+    val openProgress = remember { Animatable(0f) }
+    LaunchedEffect(openTick) {
+        // 窗口是复用的，靠 openTick 变化重放，否则只有安装后第一次能看到动画
+        openProgress.snapTo(0f)
+        openProgress.animateTo(
+            targetValue = 1f,
+            animationSpec = spring(dampingRatio = 0.68f, stiffness = 34f, visibilityThreshold = 0.002f),
+        )
+    }
     val ringRadius = BallRingRadius
     val itemSize = BallRingItem
     val pad = BallRingPad
@@ -228,9 +243,13 @@ private fun RingMenu(
                 List(count) { index -> -90f + 180f * index / (count - 1) }
             }
             ringActions.take(count).forEachIndexed { index, action ->
+                // 错峰：越靠后的图标越晚出现
+                val local = ((openProgress.value * (count + 7.5f)) - index).coerceIn(0f, 1f)
                 val rad = Math.toRadians(angles[index].toDouble())
-                val dx = with(density) { (radiusPx * cos(rad).toFloat()).toDp() }
-                val dy = with(density) { (radiusPx * sin(rad).toFloat()).toDp() }
+                // 半径也跟着从球心往外推，看起来像从球里弹出来
+                val currentRadius = radiusPx * (0.55f + 0.45f * local)
+                val dx = with(density) { (currentRadius * cos(rad).toFloat()).toDp() }
+                val dy = with(density) { (currentRadius * sin(rad).toFloat()).toDp() }
                 Box(
                     modifier = Modifier
                         .offset(
@@ -238,6 +257,12 @@ private fun RingMenu(
                             y = dy,
                         )
                         .size(itemSize)
+                        .graphicsLayer {
+                            alpha = local
+                            val s = 0.45f + 0.55f * local
+                            scaleX = s
+                            scaleY = s
+                        }
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                         .clickable { onRingAction(action) },
