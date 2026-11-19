@@ -42,6 +42,7 @@ import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
@@ -51,6 +52,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -319,7 +321,6 @@ fun ChatFloatingPanel(
                                 text = state.preview,
                                 isReasoning = state.previewIsReasoning,
                                 generating = state.generating,
-                                fillHeight = false,
                             )
                         }
                         state.pendingTools.forEach { tool ->
@@ -468,37 +469,36 @@ private fun ResizeHandle(
     )
 }
 
-/** 悬浮窗里的一条历史消息：用户靠右、助手靠左，助手内容按 Markdown 渲染 */
+/**
+ * 悬浮窗里的一条历史消息。
+ *
+ * 和 App 聊天页一致：助手回复是整块纯文本（不套气泡、占满宽度），
+ * 只有自己发的消息才是气泡。
+ */
 @Composable
 private fun FloatingMessageBubble(message: FloatingMessage) {
-    val isUser = message.isUser
+    if (!message.isUser) {
+        MaterialMarkdown(
+            content = message.text,
+            style = MaterialTheme.typography.bodyMedium,
+            renderMath = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        return
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+        horizontalArrangement = Arrangement.End,
     ) {
         Surface(
             shape = MaterialTheme.shapes.large,
-            color = if (isUser) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerLowest
-            },
-            modifier = if (isUser) Modifier.widthIn(max = 280.dp) else Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.primaryContainer,
         ) {
-            if (isUser) {
-                Text(
-                    text = message.text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                )
-            } else {
-                MaterialMarkdown(
-                    content = message.text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    renderMath = true,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                )
-            }
+            Text(
+                text = message.text,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            )
         }
     }
 }
@@ -645,24 +645,10 @@ private fun PanelHeader(
 
 // 用不带应用功能的 MaterialMarkdown：应用里的 MarkdownBlock 依赖导航、Activity 等悬浮窗里没有的东西
 @Composable
-private fun MessagePreview(
-    text: String,
-    isReasoning: Boolean,
-    generating: Boolean,
-    modifier: Modifier = Modifier,
-    /** true 时撑满外层给的高度（面板被手动拉高），false 时用固定上限 */
-    fillHeight: Boolean = false,
-) {
-    val scrollState = rememberScrollState()
-    // 生成中跟随最新内容。Markdown 在后台解析，内容变高晚于文本变化，按可滚动距离跟随
-    LaunchedEffect(generating) {
-        if (generating) snapshotFlow { scrollState.maxValue }.collect { scrollState.scrollTo(it) }
-    }
-    Surface(
-        modifier = modifier,
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        contentColor = if (isReasoning) {
+private fun MessagePreview(text: String, isReasoning: Boolean, generating: Boolean) {
+    // 同样按"整块纯文本"渲染，不套气泡也不限高；思考内容用次要色区分
+    CompositionLocalProvider(
+        LocalContentColor provides if (isReasoning) {
             MaterialTheme.colorScheme.onSurfaceVariant
         } else {
             MaterialTheme.colorScheme.onSurface
@@ -674,13 +660,7 @@ private fun MessagePreview(
             streaming = generating,
             // 悬浮窗里没有 LocalSettings，公式渲染在这里单独打开
             renderMath = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(
-                    if (fillHeight) Modifier.fillMaxHeight() else Modifier.heightIn(max = 200.dp),
-                )
-                .verticalScroll(scrollState)
-                .padding(12.dp),
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
