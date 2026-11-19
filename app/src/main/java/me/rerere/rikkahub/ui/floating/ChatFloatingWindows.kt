@@ -177,8 +177,12 @@ class ChatFloatingWindows(
                 .collect { id ->
                     if (id == null) return@collect
                     runCatching {
-                        if (conversationRepository.getConversationById(id) != null) {
+                        val existing = conversationRepository.getConversationById(id)
+                        Log.i(TAG, "track id=$id exists=${existing != null} nodes=${existing?.messageNodes?.size}")
+                        if (existing != null) {
                             chatService.initializeConversation(id)
+                            val loaded = chatService.getConversationFlow(id).value
+                            Log.i(TAG, "after init nodes=${loaded.messageNodes.size}")
                         }
                     }.onFailure { Log.w(TAG, "load conversation for floating window failed", it) }
                 }

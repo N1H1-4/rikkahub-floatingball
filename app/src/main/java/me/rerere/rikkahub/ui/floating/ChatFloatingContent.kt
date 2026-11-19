@@ -301,10 +301,16 @@ fun ChatFloatingPanel(
                     LaunchedEffect(state.preview.length, state.generating) {
                         if (state.generating) historyScroll.scrollTo(historyScroll.maxValue)
                     }
+                    // 阅读区高度：手动拉高过窗口时吃掉剩余高度；否则给一个有上下限的固定区间，
+                    // 内容超出就在这块里滚动（不能让高度跟着内容长，否则一长就顶到屏幕边缘）
+                    val readingModifier = if (heightPinned) {
+                        Modifier.weight(1f)
+                    } else {
+                        Modifier
+                            .heightIn(min = 200.dp, max = maxHeight * 0.62f)
+                    }
                     Column(
-                        modifier = Modifier
-                            .weight(1f, fill = heightPinned)
-                            .verticalScroll(historyScroll),
+                        modifier = readingModifier.verticalScroll(historyScroll),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         state.history.forEach { message -> FloatingMessageBubble(message) }
