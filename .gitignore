@@ -11,3 +11,5 @@ local.properties
 .cursor
 .history
 .kotlin
+# release 签名与口令，只留在本地
+/.signing

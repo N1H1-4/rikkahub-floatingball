@@ -20,8 +20,11 @@ import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.BuildConfig
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.util.Locale
 
-private const val API_URL = "https://updates.rikka-ai.com/"
+private const val API_URL =
+    "https://api.github.com/repos/N1H1-4/rikkahub-floatingball/releases/latest"
+private const val RELEASES_URL = "https://github.com/N1H1-4/rikkahub-floatingball/releases"
 
 class UpdateChecker(
     private val client: OkHttpClient,
@@ -35,6 +38,8 @@ class UpdateChecker(
         initialValue = UiState.Loading,
     )
 
+    // 本分支的包名和签名都与官方版不同，所以更新检查指向自己的 GitHub Releases，
+    // 不能再用上游更新服务器（那里只有官方包，装不上去）
     private fun checkUpdate(): Flow<UiState<UpdateInfo>> = flow {
         emit(UiState.Loading)
         emit(
@@ -44,16 +49,31 @@ class UpdateChecker(
                         Request.Builder()
                             .url(API_URL)
                             .get()
+                            .addHeader("Accept", "application/vnd.github+json")
                             .addHeader(
                                 "User-Agent",
-                                "RikkaHub ${BuildConfig.VERSION_NAME} #${BuildConfig.VERSION_CODE}"
+                                "RikkaHub-FloatingBall ${BuildConfig.VERSION_NAME} #${BuildConfig.VERSION_CODE}"
                             )
                             .build()
                     ).await()
                     if (response.isSuccessful) {
-                        json.decodeFromString<UpdateInfo>(response.body.string())
+                        val release = json.decodeFromString<GithubRelease>(response.body.string())
+                        UpdateInfo(
+                            version = release.tagName,
+                            publishedAt = release.publishedAt,
+                            changelog = release.body,
+                            downloads = release.assets
+                                .filter { it.name.endsWith(".apk", ignoreCase = true) }
+                                .map {
+                                    UpdateDownload(
+                                        name = it.name,
+                                        url = it.downloadUrl,
+                                        size = it.size.toReadableSize(),
+                                    )
+                                },
+                        )
                     } else {
-                        throw Exception("Failed to fetch update info")
+                        throw Exception("Failed to fetch update info: HTTP ${response.code}")
                     }
                 } catch (e: Exception) {
                     throw Exception("Failed to fetch update info", e)
@@ -83,9 +103,31 @@ class UpdateChecker(
             // 你可以保存返回的downloadId到本地，以便后续查询下载进度或状态
         }.onFailure {
             Toast.makeText(context, "Failed to update", Toast.LENGTH_SHORT).show()
-            context.openUrl(download.url) // 跳转到下载页面
+            context.openUrl(if (download.url.isBlank()) RELEASES_URL else download.url)
         }
     }
+}
+
+/** GitHub Releases 的最新一条，只取更新检查用得到的字段 */
+@Serializable
+private data class GithubRelease(
+    @kotlinx.serialization.SerialName("tag_name") val tagName: String = "",
+    @kotlinx.serialization.SerialName("body") val body: String = "",
+    @kotlinx.serialization.SerialName("published_at") val publishedAt: String = "",
+    @kotlinx.serialization.SerialName("assets") val assets: List<GithubAsset> = emptyList(),
+)
+
+@Serializable
+private data class GithubAsset(
+    @kotlinx.serialization.SerialName("name") val name: String = "",
+    @kotlinx.serialization.SerialName("browser_download_url") val downloadUrl: String = "",
+    @kotlinx.serialization.SerialName("size") val size: Long = 0L,
+)
+
+private fun Long.toReadableSize(): String = when {
+    this >= 1024L * 1024L -> String.format(Locale.US, "%.1f MB", this / 1024f / 1024f)
+    this >= 1024L -> String.format(Locale.US, "%.0f KB", this / 1024f)
+    else -> "$this B"
 }
 
 @Serializable

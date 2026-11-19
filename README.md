@@ -1,99 +1,120 @@
 <div align="center">
   <img src="docs/icon.png" alt="App Icon" width="100" />
-  <h1>RikkaHub</h1>
+  <h1>RikkaHub FloatingBall</h1>
 
-A native Android LLM chat client that supports switching between different providers for
-conversations 🤖💬
-
-Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqxe5c4)
+A tablet-first fork of RikkaHub — a floating assistant ball, an always-on-top chat window, region screenshot annotation and a stylus-friendly sketch board.
 
 [简体中文](README_ZH_CN.md) | [繁體中文](README_ZH_TW.md) | English
 </div>
 
-<div align="center">
-  <img src="docs/img/poster.png" alt="RikkaHub" width="800" />
-</div>
+> [!NOTE]
+> This is an **unofficial fork** of [rikkahub/rikkahub](https://github.com/rikkahub/rikkahub), tracking upstream **3.3.0**.
+> Everything upstream offers is kept; on top of that this fork adds a set of features aimed at large-screen
+> devices used with a stylus (developed and tested on Xiaomi Pad 6 + Xiaomi Smart Pen).
+> It is not affiliated with the RikkaHub author. If the original app already fits your needs, please use it.
 
 ## 🚀 Download
 
-🔗 [Download from Website](https://rikka-ai.com/download) (Recommended)
+- Latest APK: [**Releases**](https://github.com/N1H1-4/rikkahub-floatingball/releases) — `arm64-v8a`, Android 8.0+
+- Package name is `me.rerere.rikkahub.fb`, so this fork **can be installed alongside** the official RikkaHub
+  without touching its data
+- Requirements: Android 8.0+. In-app update checks this repository's releases.
 
-🔗 [Download from Google Play](https://play.google.com/store/apps/details?id=me.rerere.rikkahub)
+## ✨ Added in this fork
 
-> [!WARNING]
-> There are many forked versions of RikkaHub. Issues with forks are unrelated to RikkaHub, so please use forks with caution to avoid privacy leaks or excessive permission requests.
+### 🐰 Floating ball
 
-## 💖 Sponsors
+The desktop pet and the old "generating" bubble are merged into one ball that stays on top of everything.
 
-| Sponsor | Description |
-|:---:|:---|
-| <img src="docs/sponsors/sta1n.png" alt="STA1N API" width="50" /><br /><b><a href="https://sta1n.ai">STA1N API🍪</a></b> | 感谢<a href="https://sta1n.ai">STA1N API</a>对本项目的赞助！STA1N API 是一家专注于 RP（角色扮演）的 API 提供商。 |
-| <img src="docs/sponsors/api-mart.png" alt="APIMart" width="50" /><br /><b><a href="https://go.apimart.ai/gh-rikkahub">APIMart</a></b> | Thanks to APIMart for sponsoring this project! APIMart is a low-cost API platform for AI image & video generation — GPT-Image-2 from $0.006/image, 160+ images per dollar. One async API covers both image and video: submit a task, get an ID, fetch results via polling or callback. Batch tens of thousands of images without timeouts, switch models without changing code. Pay-as-you-go with no monthly fee — <a href="https://go.apimart.ai/gh-rikkahub">sign up here</a> to get started. |
-| <img src="docs/sponsors/suixiang.jpg" alt="随想AI中转" width="50" /><br /><b><a href="https://sui-xiang.com">随想AI中转</a></b> | 感谢<a href="https://sui-xiang.com">随想AI中转</a>对本项目的赞助！随想AI中转 是一家可靠高效的 API 中继服务提供商，提供 Claude、Codex、Gemini 等的中继服务。注重隐私的中转站·无数据倒卖·无模型掺水，隐私，透明，极速售后。新账户注册每日签到就送 0.5 元测试额度，充值额度 1:1，无需订阅，按量付费。多线路冗余、跨区域容灾、自动故障切换，长链路 SSE 不中断。99.9% 可用性，关键调用从不掉队。 |
-| <img src="docs/sponsors/ztest.png" alt="真测 ztest.ai" width="50" /><br /><b><a href="https://ztest.ai">真测 ztest.ai</a></b> | 感谢<a href="https://ztest.ai">真测 ztest.ai</a>对本项目的赞助！真测 ztest.ai 是一个 AI 中转站模型检测平台，检测结果数据全公开，23 项探针覆盖协议、身份、能力、内容完整性、安全性、性能六大维度，交叉印证识别伪造与降级。作为独立第三方验证平台，实时监测 AI 中转站的模型真实性、响应质量与服务可用性。 |
-| <img src="docs/sponsors/maru.png" alt="MaruCode" width="50" /><br /><b><a href="https://api.muteki.site/register?aff=Rikkahub&promo=Rikkahub">MaruCode</a></b> | <b><a href="https://api.muteki.site/register?aff=Rikkahub&promo=Rikkahub">MaruCode</a></b> 是一家偶尔做做慈善的小破站 API，自营号池，主要提供 Codex、Claude Code、GPT Image 等主流模型，支持 Websocket 协议，明码标价(Codex 0.25x, CC 1.5x)，透明汇率(1:1)，<a href="https://api.muteki.site/register?aff=Rikkahub&promo=Rikkahub">新用户注册送 2 刀</a>。<a href="https://images-2.muteki.site">生图工作台🖼️</a> |
-| <img src="docs/sponsors/naapi.png" alt="NaAPI 钠API" width="50" /><br /><b><a href="https://naapi.cc/register?aff=rikkahub">NaAPI 钠API</a></b> | 感谢<a href="https://naapi.cc/register?aff=rikkahub">NaAPI</a>（naapi.cc）对本项目的赞助！NaAPI 是一个兼容 OpenAI 的 LLM 网关，以优惠价格稳定提供 OpenAI、Anthropic、Google 等厂商的 300+ 款模型。只需一个 Base URL 和一个 Key 即可接入；多线路冗余、自动故障切换，长链路 SSE 不中断；严格按量付费，充值 1:1，无需订阅，无隐藏加价。 |
+- Avatar is customizable (photo / emoji / image URL / built-in pattern), with size, opacity, edge docking and
+  half-hidden docking
+- While the AI is generating, the ball morphs into an animated shape
+- **Tap**: expands the floating chat window if a conversation is being tracked, otherwise starts a region
+  screenshot — the tap action can be changed in settings
+- **Long press**: opens a half-circle menu on the inner side of the screen with up to 5 actions; tapping the
+  ball in the centre closes it
+- History conversations and assistant switching open as a small list layer next to the ball, instead of
+  jumping back into the app
 
-## ✨ Features
+Available actions: new floating chat · conversation history · open RikkaHub · full-screen capture & ask ·
+region capture · close floating ball · open settings · statistics · switch assistant.
 
-- 🎨 Material 3 Expressive design
-- 📦 Workspace: a proot-based Linux agent environment
-- 📱 Phone Use: let the AI operate your phone
-- 🎬 Media generation (image and video)
-- 🔄 Multiple AI Provider Support: custom API / URL / models (all OpenAI, Google, Anthropic compatible api)
-- 🖥️ Web access for multi-platform use
-- 🛠️ MCP and Skills support
-- 📝 Markdown Rendering (with code highlighting, Latex formulas, tables, Mermaid)
-- 🔍 Search capabilities (Exa, Tavily, Zhipu, LinkUp, Brave, Perplexity, etc.)
-- 🧩 Prompt variables (model name, time, etc.)
-- 🤳 QR code export and import for providers
-- 🤖 Agent customization
-- 🧠 File-based memory
-- 📝 AI Translation
-- 🌐 Custom HTTP request headers and request bodies
-- 💌 Silly Tavern character card import
+### 💬 Floating chat window
 
-## ✨ Development
+- Draggable, and resizable by dragging the bottom-right handle — width and height can both go up to
+  near-full-screen
+- Shows the conversation history with Markdown and LaTeX support, so you can keep reading without leaving
+  your current app
+- Composer keeps quick messages, model switching and reasoning depth
+- A "open floating window" button was added to the chat top bar to pop the current conversation out at once
 
-> [!IMPORTANT]
-> This project does not accept pull requests (PRs).
+### ✂️ Region screenshot → ask
 
-This project is developed using [Android Studio](https://developer.android.com/studio).
+- Select a region, annotate it, then send it to a conversation
+- Aspect ratio presets, brush/colour, undo & redo
+- Four exits: copy to clipboard · save to gallery · send to a new chat · send to an existing chat
+- Full-screen capture skips the editor and opens the chat with the image already attached
 
-Technology stack documentation:
+### 🖊️ Sketch board for stylus
 
-- [Kotlin](https://kotlinlang.org/) (Development language)
-- [Koin](https://insert-koin.io/) (Dependency Injection)
-- [Jetpack Compose](https://developer.android.com/jetpack/compose) (UI framework)
-- [DataStore](https://developer.android.com/topic/libraries/architecture/datastore) (Preference data
-  storage)
-- [Room](https://developer.android.com/training/data-storage/room) (Database)
-- [Coil](https://coil-kt.github.io/coil/) (Image loading)
-- [Material 3 Expressive](https://m3.material.io/) (UI design)
-- [Navigation 3](https://developer.android.com/guide/navigation/navigation-3) (Navigation)
-- [Okhttp](https://square.github.io/okhttp/) (HTTP client)
-- [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) (JSON serialization)
+- **Stylus-only** input mode by default, so a resting palm or finger never leaves a mark; switchable to a
+  finger-friendly mode
+- In stylus mode, one finger pans and two fingers pinch-zoom the canvas (1×–4×)
+- Six brushes including pressure-sensitive pen and calligraphy
 
-> [!TIP]
-> You need a `google-services.json` file at `app` folder to build the app.
+### 📤 Share to a new chat
 
-## 💰 Donate
+- Share images, documents, PDF and Office files from any app; pick an assistant and land in a fresh
+  conversation with the attachments already there
 
-* [Ko-fi](https://ko-fi.com/reovodev)
-* [爱发电](https://afdian.com/a/reovo)
+## 📚 Inherited from upstream
 
-## ⭐ Star History
+Material 3 Expressive design · multiple AI providers (OpenAI / Google / Anthropic compatible custom
+API / URL / models) · MCP and Skills · workspace (proot-based Linux agent environment) · Phone Use ·
+media generation · web access · Markdown rendering (code highlight, LaTeX, tables, Mermaid) · search
+providers · QR code export & import for providers · assistant customization · file-based memory ·
+AI translation · custom HTTP headers and bodies · SillyTavern character card import.
 
-If you like this project, please give it a star ⭐
+## ⚠️ Known limitations
 
-<a href="https://www.star-history.com/?type=date&repos=re-ovo%2Frikkahub">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=re-ovo/rikkahub&type=date&theme=dark&legend=top-left&sealed_token=qSytWeq7LkzQQViTjK0MYlvvA_qkfuwjOxOqgbRpLUZZwok5rO6LXhpVL7Mq-q3o89BfKpzE7g66BCy18H6eiqTsD8czD0J-HejLqmHy-npcvCTHu11wZw" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=re-ovo/rikkahub&type=date&legend=top-left&sealed_token=qSytWeq7LkzQQViTjK0MYlvvA_qkfuwjOxOqgbRpLUZZwok5rO6LXhpVL7Mq-q3o89BfKpzE7g66BCy18H6eiqTsD8czD0J-HejLqmHy-npcvCTHu11wZw" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=re-ovo/rikkahub&type=date&legend=top-left&sealed_token=qSytWeq7LkzQQViTjK0MYlvvA_qkfuwjOxOqgbRpLUZZwok5rO6LXhpVL7Mq-q3o89BfKpzE7g66BCy18H6eiqTsD8czD0J-HejLqmHy-npcvCTHu11wZw" />
- </picture>
-</a>
+- Pen barrel buttons are not supported on HyperOS: the system does not report `buttonState` to apps, so
+  pen-button shortcuts cannot be implemented
+- The canvas only pans after zooming in; at 1× the paper exactly fits the screen
+- The release APK targets `arm64-v8a`; a debug build for other ABIs can be built from source
+- In-app updates are shipped from this repository's releases, not from the official update server
+
+## 🛠️ Build
+
+Requirements: JDK 21+, Android SDK Platform 37 (with minor API level 2), Node 22+ and pnpm 11.
+
+```bash
+# web module bundles a React frontend, install it once
+cd web-ui && pnpm install --frozen-lockfile && cd ..
+
+# google-services.json is required by the google-services plugin
+# (a placeholder file is enough for local builds)
+
+./gradlew assembleGithubDebug   # debug APK, package name me.rerere.rikkahub.debug
+./gradlew assembleGithubRelease # release APK (needs signing config in local.properties)
+```
+
+Release signing reads `storeFile` / `storePassword` / `keyAlias` / `keyPassword` from `local.properties`.
+
+### Syncing with upstream
+
+```bash
+git remote add upstream https://github.com/rikkahub/rikkahub.git
+git fetch upstream
+git merge upstream/master
+```
+
+## 🙏 Credits
+
+- Original project: [rikkahub/rikkahub](https://github.com/rikkahub/rikkahub) by [re-ovo](https://github.com/re-ovo)
+- Floating windows are built on [FloatingX](https://github.com/Petterpx/FloatingX)
+- Icons from [HugeIcons](https://hugeicons.com/), sketch rendering on [androidx.ink](https://developer.android.com/jetpack/androidx/releases/ink)
 
 ## 📄 License
 
-This project is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
+Licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0), the same license as the
+original project. Modified sources of this fork are published in this repository.

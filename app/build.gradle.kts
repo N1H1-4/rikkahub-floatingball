@@ -23,11 +23,13 @@ android {
     }
 
     defaultConfig {
-        applicationId = "me.rerere.rikkahub"
+        // 本分支与官方版包名区分，可以和官方 RikkaHub 并存安装（namespace 仍沿用上游，源码包结构不变）
+        applicationId = "me.rerere.rikkahub.fb"
         minSdk = 26
         targetSdk = 37
-        versionCode = 197
-        versionName = "3.3.0"
+        // 版本号编码：主版本*10000 + 次版本*100 + 修订，如 3.3.6 -> 33600
+        versionCode = 33600
+        versionName = "3.3.6-fb"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

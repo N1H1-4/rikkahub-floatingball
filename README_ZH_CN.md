@@ -1,100 +1,107 @@
 <div align="center">
   <img src="docs/icon.png" alt="App 图标" width="100" />
-  <h1>RikkaHub</h1>
+  <h1>RikkaHub FloatingBall</h1>
 
-一个原生Android LLM 聊天客户端，支持切换不同的供应商进行聊天 🤖💬
+RikkaHub 的平板向分支 —— 悬浮球、常驻悬浮对话窗、选区截屏标注，以及适配手写笔的画板。
 
 [English](README.md) | [繁體中文](README_ZH_TW.md) | 简体中文
-
-点击链接加入群聊 👉 [【RikkaHub】](https://qm.qq.com/q/I8MSU0FkOu)
-
 </div>
 
-<div align="center">
-  <img src="docs/img/poster.png" alt="RikkaHub" width="800" />
-</div>
-
+> [!NOTE]
+> 这是 [rikkahub/rikkahub](https://github.com/rikkahub/rikkahub) 的**非官方分支**，当前同步上游 **3.3.0**。
+> 上游的功能全部保留，在此基础上增加了一组面向大屏 + 手写笔的功能（在小米平板 6 + 灵感触控笔上开发测试）。
+> 本项目与 RikkaHub 作者无关；如果原版已经够用，建议直接使用原版。
 
 ## 🚀 下载
 
-🔗 [前往官网下载](https://rikka-ai.com/download)（推荐）
+- 最新 APK：见 [**Releases**](https://github.com/N1H1-4/rikkahub-floatingball/releases)（`arm64-v8a`，Android 8.0+）
+- 包名是 `me.rerere.rikkahub.fb`，所以本分支**可以和官方 RikkaHub 并存安装**，互不影响数据
+- 系统要求 Android 8.0+；应用内更新检查的是本仓库的 Releases
 
-🔗 [前往 Google Play 下载](https://play.google.com/store/apps/details?id=me.rerere.rikkahub)
+## ✨ 本分支的改动
 
-> [!WARNING]
-> RikkaHub 存在许多 fork 版本，fork 版本出现问题与 RikkaHub 无关，请谨慎使用 fork 版本，避免隐私泄露或者过度索要权限问题。
+### 🐰 悬浮球
 
-## 💖 赞助商
+原来的桌面宠物和“生成中”气泡合并成一个常驻最上层的球。
 
-| 赞助商 | 介绍 |
-|:---:|:---|
-| <img src="docs/sponsors/sta1n.png" alt="STA1N API" width="50" /><br /><b><a href="https://sta1n.ai">STA1N API🍪</a></b> | 感谢<a href="https://sta1n.ai">STA1N API</a>对本项目的赞助！主营 RP 的站。 |
-| <img src="docs/sponsors/api-mart.png" alt="APIMart" width="50" /><br /><b><a href="https://go.apimart.ai/gh-rikkahub">APIMart</a></b> | 感谢 APIMart 赞助了本项目！APIMart 是专注 AI 图片/视频生成的低价 API 平台，GPT-Image-2 低至 $0.006/张，1 美元可出图 160+ 张。图片、视频一套异步 API 通吃，提交任务拿 ID、回调取结果，跑批万张不超时、换模型不改代码。按量付费、无月费，通过<a href="https://go.apimart.ai/gh-rikkahub">此注册链接</a>注册即可开用。 |
-| <img src="docs/sponsors/suixiang.jpg" alt="随想AI中转" width="50" /><br /><b><a href="https://sui-xiang.com">随想AI中转</a></b> | 感谢<a href="https://sui-xiang.com">随想AI中转</a>对本项目的赞助！随想AI中转 是一家可靠高效的 API 中继服务提供商，提供 Claude、Codex、Gemini 等的中继服务。注重隐私的中转站·无数据倒卖·无模型掺水，隐私，透明，极速售后。新账户注册每日签到就送 0.5 元测试额度，充值额度 1:1，无需订阅，按量付费。多线路冗余、跨区域容灾、自动故障切换，长链路 SSE 不中断。99.9% 可用性，关键调用从不掉队。 |
-| <img src="docs/sponsors/ztest.png" alt="真测 ztest.ai" width="50" /><br /><b><a href="https://ztest.ai">真测 ztest.ai</a></b> | 感谢<a href="https://ztest.ai">真测 ztest.ai</a>对本项目的赞助！真测 ztest.ai 是一个 AI 中转站模型检测平台，检测结果数据全公开，23 项探针覆盖协议、身份、能力、内容完整性、安全性、性能六大维度，交叉印证识别伪造与降级。作为独立第三方验证平台，实时监测 AI 中转站的模型真实性、响应质量与服务可用性。 |
-| <img src="docs/sponsors/maru.png" alt="MaruCode" width="50" /><br /><b><a href="https://api.muteki.site/register?aff=Rikkahub&promo=Rikkahub">MaruCode</a></b> | <b><a href="https://api.muteki.site/register?aff=Rikkahub&promo=Rikkahub">MaruCode</a></b> 是一家偶尔做做慈善的小破站 API，自营号池，主要提供 Codex、Claude Code、GPT Image 等主流模型，支持 Websocket 协议，明码标价(Codex 0.25x, CC 1.5x)，透明汇率(1:1)，<a href="https://api.muteki.site/register?aff=Rikkahub&promo=Rikkahub">新用户注册送 2 刀</a>。<a href="https://images-2.muteki.site">生图工作台🖼️</a> |
-| <img src="docs/sponsors/naapi.png" alt="钠API" width="50" /><br /><b><a href="https://naapi.cc/register?aff=rikkahub">钠API</a></b> | 感谢<a href="https://naapi.cc/register?aff=rikkahub">钠API</a>对本项目的赞助！钠API（naapi.cc）是 OpenAI 兼容的 LLM 网关，以优惠价格提供 OpenAI、Anthropic、Google 等 300+ 模型访问。一个 base URL 加一个 key 即可接入；多线路冗余、自动故障切换，长链路 SSE 不中断；按量付费、充值额度 1:1，无订阅、无隐藏加价。 |
+- 形象可自定义（相册图片 / Emoji / 图片链接 / 内置图案），支持大小、不透明度、贴边吸附、贴边半隐
+- AI 生成时球会变成变形自转的动画形象，一眼能看出正在思考
+- **单击**：有正在跟的会话就展开悬浮对话窗，否则直接进入选区截屏（可在设置里改成任意动作）
+- **长按**：朝屏幕内侧展开半圆菜单，最多 5 个快捷动作；点中间的球即关闭悬浮球
+- 历史会话、切换助手改成球旁边的小浮层列表，不再跳回应用里
 
-## ✨ 功能特色
+可用动作：悬浮窗新对话 · 历史会话 · 打开 RikkaHub · 截全屏并提问 · 选区截图 · 关闭悬浮球 · 打开设置 · 统计页面 · 切换助手。
 
-- 🎨 现代化安卓APP设计（Material 3 Expressive / 预测性返回）
-- 📦 工作区：基于 proot 的 Linux 智能体环境
-- 📱 Phone Use：让 AI 操控手机
-- 🎬 媒体生成（图片、视频）
-- 🔄 多种类型的供应商支持，自定义 API / URL / 模型（目前支持 OpenAI、Google、Anthropic）
-- 🖥️ Web多端访问支持
-- 🛠️ MCP 与 Skills 支持
-- 📝 Markdown 渲染（支持代码高亮、数学公式、表格、Mermaid）
-- 🔍 搜索功能（Exa、Tavily、Zhipu、LinkUp、Brave、Perplexity、..）
-- 🧩 Prompt 变量（模型名称、时间等）
-- 🤳 二维码导出和导入提供商
-- 🤖 智能体自定义
-- 🧠 基于文件的记忆
-- 📝 AI翻译
-- 🌐 自定义HTTP请求头和请求体
-- 💌 SillyTavern 角色卡导入
+### 💬 悬浮对话窗
 
-## ✨ 开发
+- 可拖动；拖右下角把手能改尺寸，宽高都可以拉到接近整屏
+- 显示当前会话的历史消息，支持 Markdown 与 LaTeX 公式，不用切回应用就能继续看
+- 输入区保留快捷消息、模型切换、思考深度
+- 聊天页顶栏新增「打开悬浮窗」按钮，一键把当前会话弹成浮窗
 
-> [!IMPORTANT]
-> 本项目不接受 Pull Request（PR）。
+### ✂️ 选区截屏提问
 
-本项目使用[Android Studio](https://developer.android.com/studio)开发。
+- 框选一块区域、标注，然后直接发给对话
+- 支持画幅比例预设、画笔与颜色、撤销重做
+- 四个出口：复制到剪贴板 · 保存到相册 · 发送到新对话 · 发送到已有对话
+- 全屏截取会跳过编辑器，直接带着整张图打开对话
 
-技术栈文档:
+### 🖊️ 手写笔画板
 
-- [Kotlin](https://kotlinlang.org/) (开发语言)
-- [Koin](https://insert-koin.io/) (依赖注入)
-- [Jetpack Compose](https://developer.android.com/jetpack/compose) (UI 框架)
-- [DataStore](https://developer.android.com/topic/libraries/architecture/datastore?hl=zh-cn#preferences-datastore) (
-  偏好数据存储)
-- [Room](https://developer.android.com/training/data-storage/room) (数据库)
-- [Coil](https://coil-kt.github.io/coil/) (图片加载)
-- [Material 3 Expressive](https://m3.material.io/) (UI 设计)
-- [Navigation 3](https://developer.android.com/guide/navigation/navigation-3) (导航)
-- [Okhttp](https://square.github.io/okhttp/) (HTTP 客户端)
-- [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) (Json序列化)
+- 默认「仅手写笔」模式，手掌或手指压屏不会留痕；可切成手指也能画
+- 笔模式下单指拖动画纸、双指捏合缩放（1×–4×）
+- 6 种笔刷，含压感笔与毛笔
 
-> [!TIP]
-> 你需要在 `app` 文件夹下添加 `google-services.json` 文件才能构建应用。
+### 📤 分享到新对话
 
-## 💰 捐赠
+- 从任何应用分享图片、文档、PDF、Office 文件，选一个助手即可进入新对话，附件已经带好
 
-* [Ko-fi](https://ko-fi.com/reovodev)
-* [爱发电](https://afdian.com/a/reovo)
+## 📚 继承自上游
 
-## ⭐ Star History
+Material 3 Expressive 设计 · 多供应商（OpenAI / Google / Anthropic 兼容的自定义 API / URL / 模型）·
+MCP 与 Skills · 工作区（基于 proot 的 Linux 智能体环境）· Phone Use · 媒体生成 · Web 多端访问 ·
+Markdown 渲染（代码高亮、数学公式、表格、Mermaid）· 搜索服务 · 供应商二维码导入导出 · 智能体自定义 ·
+基于文件的记忆 · AI 翻译 · 自定义 HTTP 请求头与请求体 · SillyTavern 角色卡导入。
 
-如果喜欢这个项目，请给个Star ⭐
+## ⚠️ 已知限制
 
-<a href="https://www.star-history.com/?type=date&repos=re-ovo%2Frikkahub">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=re-ovo/rikkahub&type=date&theme=dark&legend=top-left&sealed_token=qSytWeq7LkzQQViTjK0MYlvvA_qkfuwjOxOqgbRpLUZZwok5rO6LXhpVL7Mq-q3o89BfKpzE7g66BCy18H6eiqTsD8czD0J-HejLqmHy-npcvCTHu11wZw" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=re-ovo/rikkahub&type=date&legend=top-left&sealed_token=qSytWeq7LkzQQViTjK0MYlvvA_qkfuwjOxOqgbRpLUZZwok5rO6LXhpVL7Mq-q3o89BfKpzE7g66BCy18H6eiqTsD8czD0J-HejLqmHy-npcvCTHu11wZw" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=re-ovo/rikkahub&type=date&legend=top-left&sealed_token=qSytWeq7LkzQQViTjK0MYlvvA_qkfuwjOxOqgbRpLUZZwok5rO6LXhpVL7Mq-q3o89BfKpzE7g66BCy18H6eiqTsD8czD0J-HejLqmHy-npcvCTHu11wZw" />
- </picture>
-</a>
+- 不支持笔杆按键：HyperOS 不向应用上报 `buttonState`，所以无法实现笔杆键快捷操作
+- 画纸只在放大后才能平移，1× 时正好铺满屏幕
+- Release APK 只出 `arm64-v8a`；其他 ABI 可以自行从源码构建 debug 版
+- 应用内更新检查的是本仓库的 Releases，不再走官方更新服务器
+
+## 🛠️ 构建
+
+需要 JDK 21+、Android SDK Platform 37（含 minor API level 2）、Node 22+ 与 pnpm 11。
+
+```bash
+# web 模块内嵌 React 前端，先装一次依赖
+cd web-ui && pnpm install --frozen-lockfile && cd ..
+
+# google-services 插件需要 google-services.json
+# （本地构建放一份占位文件即可）
+
+./gradlew assembleGithubDebug   # debug 包，包名 me.rerere.rikkahub.debug
+./gradlew assembleGithubRelease # release 包（签名从 local.properties 读取）
+```
+
+Release 签名读取 `local.properties` 里的 `storeFile` / `storePassword` / `keyAlias` / `keyPassword`。
+
+### 同步上游
+
+```bash
+git remote add upstream https://github.com/rikkahub/rikkahub.git
+git fetch upstream
+git merge upstream/master
+```
+
+## 🙏 致谢
+
+- 原始项目：[rikkahub/rikkahub](https://github.com/rikkahub/rikkahub)，作者 [re-ovo](https://github.com/re-ovo)
+- 悬浮窗基于 [FloatingX](https://github.com/Petterpx/FloatingX)
+- 图标来自 [HugeIcons](https://hugeicons.com/)，手写渲染基于 [androidx.ink](https://developer.android.com/jetpack/androidx/releases/ink)
 
 ## 📄 许可证
 
-本项目基于 [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0) 开源。
+基于 [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0) 开源，与原项目一致。本分支的修改代码
+同样公开在本仓库中。
