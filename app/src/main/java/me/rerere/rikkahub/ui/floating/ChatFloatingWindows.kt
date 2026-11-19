@@ -38,6 +38,7 @@ import me.rerere.rikkahub.ui.screenshot.EXTRA_SEND_IMMEDIATELY
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.RouteTarget
 import me.rerere.rikkahub.ui.screenshot.ScreenCaptureActivity
+import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.datastore.DisplaySetting
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import com.petterp.floatingx.core.layout.FxHalfHide
@@ -116,6 +117,7 @@ class ChatFloatingWindows(
     private val appScope: AppScope,
     private val tracker: ChatFloatingTracker,
     private val settingsStore: SettingsStore,
+    private val conversationRepository: ConversationRepository,
     private val phoneUseManager: PhoneUseManager,
     lazyChatService: Lazy<ChatService>,
 ) {
@@ -165,6 +167,21 @@ class ChatFloatingWindows(
     init {
         appScope.launch {
             tracker.window.map { it?.expanded }.distinctUntilChanged().collect(::render)
+        }
+        // 悬浮窗跟上的会话可能是从历史列表里选的，应用里没打开过 → 内存里是空会话，读不到消息。
+        // 这里把它从数据库加载进来，面板才能显示已有的对话内容。
+        appScope.launch {
+            tracker.window
+                .map { it?.conversationId }
+                .distinctUntilChanged()
+                .collect { id ->
+                    if (id == null) return@collect
+                    runCatching {
+                        if (conversationRepository.getConversationById(id) != null) {
+                            chatService.initializeConversation(id)
+                        }
+                    }.onFailure { Log.w(TAG, "load conversation for floating window failed", it) }
+                }
         }
         // 悬浮窗权限是从设置页跳到系统页面授予的，回来时开关值没变过、设置流不会再发射，
         // 这里在应用回到前台时自己重画一次，否则球永远装不上
@@ -910,8 +927,11 @@ internal fun buildFloatingChatUiState(
         conversation.messageNodes.firstNotNullOfOrNull { node -> node.messages.firstOrNull { it.id == id } }
     }
     // 已有对话内容：只取文本，最多 40 条，够看上下文又不至于把窗口撑爆
+    // 本轮回复由 preview 单独渲染，别在历史列表里再来一份（否则同一条会显示两次）
+    val replyMessageOrNull = reply
     val history = conversation.messageNodes
         .mapNotNull { node -> runCatching { node.currentMessage }.getOrNull() }
+        .filter { message -> message.id != replyMessageOrNull?.id }
         .mapNotNull { message ->
             val body = message.parts
                 .filterIsInstance<UIMessagePart.Text>()
