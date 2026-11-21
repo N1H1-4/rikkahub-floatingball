@@ -1,6 +1,6 @@
 <div align="center">
   <img src="docs/icon.png" alt="App 圖示" width="100" />
-  <h1>PadkaHub(RikkaHub)</h1>
+  <h1>PadkaHub(RikkaHub-floatingball)</h1>
 
 基於 RikkaHub 改進的版本，核心是一顆懸浮球 —— 一個常駐在所有應用程式之上的 AI 助手。
 

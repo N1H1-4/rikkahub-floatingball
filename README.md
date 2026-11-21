@@ -1,6 +1,6 @@
 <div align="center">
   <img src="docs/icon.png" alt="App Icon" width="100" />
-  <h1>PadkaHub(RikkaHub)</h1>
+  <h1>PadkaHub(RikkaHub-floatingball)</h1>
 
 A RikkaHub-based build built around one thing: the floating ball — an assistant that stays on top of every app.
 
