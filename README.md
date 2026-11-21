@@ -1,8 +1,8 @@
 <div align="center">
   <img src="docs/icon.png" alt="App Icon" width="100" />
-  <h1>RikkaHub FloatingBall</h1>
+  <h1>PadkaHub(RikkaHub)</h1>
 
-A tablet-first fork of RikkaHub — a floating assistant ball, an always-on-top chat window, region screenshot annotation and a stylus-friendly sketch board.
+A tablet-first build based on RikkaHub — a floating assistant ball, an always-on-top chat window, region screenshot annotation and a stylus-friendly sketch board.
 
 [简体中文](README_ZH_CN.md) | [繁體中文](README_ZH_TW.md) | English
 </div>
@@ -36,7 +36,7 @@ The desktop pet and the old "generating" bubble are merged into one ball that st
 - History conversations and assistant switching open as a small list layer next to the ball, instead of
   jumping back into the app
 
-Available actions: new floating chat · conversation history · open RikkaHub · full-screen capture & ask ·
+Available actions: new floating chat · conversation history · open PadkaHub · full-screen capture & ask ·
 region capture · close floating ball · open settings · statistics · switch assistant.
 
 ### 💬 Floating chat window
