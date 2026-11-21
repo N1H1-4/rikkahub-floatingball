@@ -14,7 +14,7 @@
 
 ## 🚀 下載
 
-- 最新 APK：見 [**Releases**](https://github.com/N1H1-4/rikkahub-floatingball/releases)（`arm64-v8a`，Android 8.0+）
+- 最新 APK：見 [**Releases**](https://github.com/N1H1-4/padkahub-floatingball/releases)（`arm64-v8a`，Android 8.0+）
 - 套件名是 `me.rerere.rikkahub.fb`，所以本分支**可以和官方 RikkaHub 並存安裝**，互不影響資料
 - 系統需求 Android 8.0+；應用程式內更新檢查的是本儲存庫的 Releases
 

@@ -15,7 +15,7 @@ A RikkaHub-based build built around one thing: the floating ball — an assistan
 
 ## 🚀 Download
 
-- Latest APK: [**Releases**](https://github.com/N1H1-4/rikkahub-floatingball/releases) — `arm64-v8a`, Android 8.0+
+- Latest APK: [**Releases**](https://github.com/N1H1-4/padkahub-floatingball/releases) — `arm64-v8a`, Android 8.0+
 - Package name is `me.rerere.rikkahub.fb`, so this fork **can be installed alongside** the official RikkaHub
   without touching its data
 - Requirements: Android 8.0+. In-app update checks this repository's releases.

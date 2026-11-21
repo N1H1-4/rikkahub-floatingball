@@ -23,8 +23,8 @@ import okhttp3.Request
 import java.util.Locale
 
 private const val API_URL =
-    "https://api.github.com/repos/N1H1-4/rikkahub-floatingball/releases/latest"
-private const val RELEASES_URL = "https://github.com/N1H1-4/rikkahub-floatingball/releases"
+    "https://api.github.com/repos/N1H1-4/padkahub-floatingball/releases/latest"
+private const val RELEASES_URL = "https://github.com/N1H1-4/padkahub-floatingball/releases"
 
 class UpdateChecker(
     private val client: OkHttpClient,
