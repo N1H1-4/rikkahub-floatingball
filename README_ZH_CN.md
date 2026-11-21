@@ -2,14 +2,14 @@
   <img src="docs/icon.png" alt="App 图标" width="100" />
   <h1>PadkaHub(RikkaHub)</h1>
 
-基于 RikkaHub 改进的平板向版本 —— 悬浮球、常驻悬浮对话窗、选区截屏标注，以及适配手写笔的画板。
+基于 RikkaHub 改进的版本，核心是一颗悬浮球 —— 一个常驻在所有应用之上的 AI 助手。
 
 [English](README.md) | [繁體中文](README_ZH_TW.md) | 简体中文
 </div>
 
 > [!NOTE]
 > 这是 [rikkahub/rikkahub](https://github.com/rikkahub/rikkahub) 的**非官方分支**，当前同步上游 **3.3.0**。
-> 上游的功能全部保留，在此基础上增加了一组面向大屏 + 手写笔的功能（在小米平板 6 + 灵感触控笔上开发测试）。
+> 上游的功能全部保留，在此基础上围绕**悬浮球**做了一组功能：球常驻在最上层，悬浮对话窗和截屏提问都能一键唤起。
 > 本项目与 RikkaHub 作者无关；如果原版已经够用，建议直接使用原版。
 
 ## 🚀 下载

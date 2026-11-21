@@ -2,15 +2,15 @@
   <img src="docs/icon.png" alt="App Icon" width="100" />
   <h1>PadkaHub(RikkaHub)</h1>
 
-A tablet-first build based on RikkaHub — a floating assistant ball, an always-on-top chat window, region screenshot annotation and a stylus-friendly sketch board.
+A RikkaHub-based build built around one thing: the floating ball — an assistant that stays on top of every app.
 
 [简体中文](README_ZH_CN.md) | [繁體中文](README_ZH_TW.md) | English
 </div>
 
 > [!NOTE]
 > This is an **unofficial fork** of [rikkahub/rikkahub](https://github.com/rikkahub/rikkahub), tracking upstream **3.3.0**.
-> Everything upstream offers is kept; on top of that this fork adds a set of features aimed at large-screen
-> devices used with a stylus (developed and tested on Xiaomi Pad 6 + Xiaomi Smart Pen).
+> Everything upstream offers is kept; on top of that this fork is built around a **floating ball** that stays
+> on top of whatever you are doing — a chat window or a screenshot-to-question flow is always one tap away.
 > It is not affiliated with the RikkaHub author. If the original app already fits your needs, please use it.
 
 ## 🚀 Download
