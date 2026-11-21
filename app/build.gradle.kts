@@ -27,9 +27,9 @@ android {
         applicationId = "me.rerere.rikkahub.fb"
         minSdk = 26
         targetSdk = 37
-        // 版本号编码：主版本*10000 + 次版本*100 + 修订，如 3.3.6 -> 33600
-        versionCode = 33600
-        versionName = "3.3.6-fb"
+        // 版本号编码：主版本*10000 + 次版本*100 + 修订，如 3.3.7 -> 33700
+        versionCode = 33700
+        versionName = "3.3.7-fb"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
